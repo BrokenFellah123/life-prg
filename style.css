@@ -126,3 +126,6 @@ details[open] summary::before{content:"▾ "}
 a.btn{text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
 .sw{background:var(--track);border:3px solid var(--line);padding:3px 6px;cursor:pointer;border-radius:0;min-height:44px}
 .sw.on{border-color:var(--accent)}
+.sw.lock{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;width:78px;min-height:66px;opacity:.6;text-align:center;font-size:11px;line-height:1.15;cursor:default}
+.toast{white-space:normal;max-width:92vw;text-align:center;line-height:1.6}
+select.sel{flex:1;background:var(--track);border:2px solid var(--line);border-radius:0;min-height:44px;padding:8px;font-size:16px;font-family:var(--fb);color:var(--ink)}

@@ -1,4 +1,4 @@
-/* Life RPG — prototype v0.2.2
+/* Life RPG — prototype v0.3
    Principe : on n'enregistre que des actions réelles (séances, étapes de cours, pages, puzzles, kcal).
    L'XP et les niveaux sont RECALCULÉS à partir de ces actions à chaque affichage :
    changer une règle d'XP plus tard s'applique donc à tout l'historique, sans migration. */
@@ -21,6 +21,7 @@ const RULES = {
   kcal: 40,            // XP si le seuil de kcal est atteint
   absenceRetour: 3,    // jours d'absence avant la quête « Retour » (XP du jour ×2)
   objectifPages: 10,
+  queteDemain: 20,     // XP d'une quête du lendemain réussie
 };
 
 const STATS = [
@@ -78,7 +79,8 @@ const blank = () => ({
   courses:[],       // {id,name,url,steps:{lu,fiche,quiz,rev}}
   exams:[],         // {id,name,passed}
   pomo:{},          // date → nombre de blocs de 25 min
-  outfit:{top:'none', bottom:'short-0'},
+  outfit:{},
+  tquests:[],       // quêtes du lendemain {id,date,stat,text,done}
   books:[],         // {id,title,total,done}
   pages:[],         // {id,date,book,n}
   puzzles:[],       // {id,date}
@@ -125,6 +127,7 @@ function computeEvents(){
   const SN = {lu:'lu', fiche:'fiché', quiz:'quiz réussi', rev:'révisé J+7'};
   for (const c of S.courses) for (const k in SN) if (c.steps[k]) push(c.steps[k], 'sav', RULES.etapeCours, `${c.name} : ${SN[k]}`);
   for (const d in S.pomo) if (S.pomo[d] > 0) push(d, 'sav', S.pomo[d]*RULES.pomo, `Révision : ${S.pomo[d]} × 25 min`);
+  for (const q of S.tquests || []) if (q.done) push(q.done, q.stat, RULES.queteDemain, `Quête du jour : ${q.text}`);
   for (const x of S.exams) if (x.passed) push(x.passed, 'sav', RULES.examen, `Examen réussi : ${x.name}`);
   // Sagesse
   const bt = id => (S.books.find(b => b.id === id) || {}).title || 'Livre';
@@ -151,6 +154,7 @@ function activeDays(){
   S.courses.forEach(c => Object.values(c.steps).forEach(d => d && s.add(d)));
   S.exams.forEach(x => x.passed && s.add(x.passed));
   S.pages.forEach(p => s.add(p.date)); S.books.forEach(b => b.done && s.add(b.done));
+  (S.tquests || []).forEach(q => q.done && s.add(q.done));
   S.puzzles.forEach(p => s.add(p.date)); S.elo.forEach(e => s.add(e.date));
   Object.keys(S.kcal).forEach(d => S.kcal[d] > 0 && s.add(d));
   Object.keys(S.pomo).forEach(d => S.pomo[d] > 0 && s.add(d));
@@ -172,35 +176,47 @@ function snapshot(){
 }
 function stageOf(forLvl){ let s = 0; STAGE_LVL.forEach((l,i) => { if (forLvl >= l) s = i; }); return s; }
 
-/* ================= Avatar pixel art (6 stades) + garde-robe ================= */
+/* ================= Avatar pixel art (6 stades) + garde-robe + récompenses ================= */
+// lvl = niveau perso requis (récompenses). Sans lvl : disponible dès le départ.
 const WARDROBE = {
-  top: [
-    {v:'none',   label:'Torse nu'},
-    {v:'tee-0',  label:'T-shirt blanc', c:'#f5f1e6'}, {v:'tee-1', label:'T-shirt rouge', c:'#ff5d5d'}, {v:'tee-2', label:'T-shirt noir', c:'#2b2d42'},
-    {v:'pull-0', label:'Pull gris', c:'#9aa6d6'},     {v:'pull-1', label:'Pull violet', c:'#8e5cff'}, {v:'pull-2', label:'Pull vert', c:'#3fa34d'},
-  ],
-  bottom: [
-    {v:'short-0', label:'Short rose', c:'#ff5d73'},   {v:'short-1', label:'Short noir', c:'#2b2d42'},   {v:'short-2', label:'Short bleu', c:'#4fc3ff'},
-    {v:'pant-0',  label:'Jean', c:'#3b5bdb'},         {v:'pant-1',  label:'Pantalon beige', c:'#c8a97e'}, {v:'pant-2', label:'Pantalon noir', c:'#2b2d42'},
-  ],
+  head:   [{v:'none', label:'Rien'},
+           {v:'cap',   label:'Casquette', lvl:1},  {v:'band', label:'Bandeau de sport', lvl:2},
+           {v:'hat',   label:'Chapeau', lvl:5},    {v:'crown', label:'Couronne de roi', lvl:10}],
+  face:   [{v:'none', label:'Rien'}, {v:'shades', label:'Lunettes noires', lvl:4}],
+  top:    [{v:'none',   label:'Torse nu'},
+           {v:'tee-0',  label:'T-shirt blanc', c:'#f5f1e6'}, {v:'tee-1', label:'T-shirt rouge', c:'#ff5d5d'}, {v:'tee-2', label:'T-shirt noir', c:'#2b2d42'},
+           {v:'pull-0', label:'Pull gris', c:'#9aa6d6'},     {v:'pull-1', label:'Pull violet', c:'#8e5cff'}, {v:'pull-2', label:'Pull vert', c:'#3fa34d'},
+           {v:'coat',   label:'Blouse de médecin', c:'#eef2f7', lvl:6}],
+  bottom: [{v:'short-0', label:'Short rose', c:'#ff5d73'},   {v:'short-1', label:'Short noir', c:'#2b2d42'},   {v:'short-2', label:'Short bleu', c:'#4fc3ff'},
+           {v:'pant-0',  label:'Jean', c:'#3b5bdb'},         {v:'pant-1',  label:'Pantalon beige', c:'#c8a97e'}, {v:'pant-2', label:'Pantalon noir', c:'#2b2d42'},
+           {v:'stripe',  label:'Pantalon rayé', c:'#3b3f8f', lvl:3}],
+  belt:   [{v:'none', label:'Rien'}, {v:'champ', label:'Ceinture de champion', lvl:7}],
+  back:   [{v:'none', label:'Rien'}, {v:'cape', label:'Cape rouge', lvl:8}],
+  shoes:  [{v:'white', label:'Baskets blanches'}, {v:'gold', label:'Baskets dorées', lvl:9}],
 };
-const wItem = (part, v) => WARDROBE[part].find(x => x.v === v) || WARDROBE[part][0];
+const OUTFIT0 = {head:'none', face:'none', top:'none', bottom:'short-0', belt:'none', back:'none', shoes:'white'};
+const REWARDS = Object.entries(WARDROBE).flatMap(([part, l]) => l.filter(i => i.lvl).map(i => ({...i, part}))).sort((a,b) => a.lvl - b.lvl);
+let persoLvl = 0;   // mis à jour à chaque rendu
+const unlocked = it => !it.lvl || persoLvl >= it.lvl;
+const wItem = (part, v) => { const it = WARDROBE[part].find(x => x.v === v); return it && unlocked(it) ? it : WARDROBE[part].find(x => x.v === OUTFIT0[part]); };
 const shade = (hex, f=.75) => '#' + [1,3,5].map(i => Math.round(parseInt(hex.slice(i,i+2),16)*f).toString(16).padStart(2,'0')).join('');
 
 function avatarSVG(stage, px, outfit = S.outfit || {}){
+  const o = Object.assign({}, OUTFIT0, outfit);
+  const it = {}; for (const k in OUTFIT0) it[k] = wItem(k, o[k]);
   const W = 32, H = 36, g = Array.from({length:H}, () => Array(W).fill(0));
-  // codes : 1 peau tête/cou, 2 cheveux, 3 short, 4 relief torse, 5 chaussures, 6 torse,
-  //         7 haut du bras, 8 avant-bras, 10 jambes, 11 relief jambes, 12 mains
+  // codes : 1 peau tête/cou, 2 cheveux, 3 short, 4 relief torse, 5 chaussures, 6 torse, 7 haut du bras,
+  // 8 avant-bras, 10 jambes, 11 relief jambes, 12 mains, 20+ accessoires
   const span = (y, x0, x1, c) => { for (let x = x0; x <= x1; x++) if (y>=0 && y<H && x>=0 && x<W) g[y][x] = c; };
   const sym = (y, hw, c) => span(y, 16-hw, 15+hw, c);
-  const s = stage + 1;                                            // 1..6
+  const s = stage + 1;
+  const sh = 3 + s, wa = 3 + Math.floor(s/3), aw = 1 + Math.floor((s+1)/2), ax0 = 16 - sh - aw, lw = 2 + Math.floor(s/2);
+  if (it.back.v === 'cape') for (let y = 10; y <= 31; y++) sym(y, sh + 1 + Math.floor((y-10)/5), 29);   // cape (derrière le corps)
   for (let y = 2; y <= 8; y++) sym(y, y===2||y===8 ? 2 : 3, 1);   // tête
   sym(2, 3, 2); sym(3, 3, 2); span(4, 12, 12, 2); span(4, 19, 19, 2);
-  g[5][14] = 2; g[5][17] = 2;                                     // yeux
-  sym(9, 1 + (s >= 4 ? 1 : 0), 1);                                // cou
-  const sh = 3 + s, wa = 3 + Math.floor(s/3);                     // épaules / taille
+  g[5][14] = 2; g[5][17] = 2;
+  sym(9, 1 + (s >= 4 ? 1 : 0), 1);
   for (let y = 10; y <= 19; y++){ const t = (y-10)/9; sym(y, Math.round(sh + (wa - sh)*t*t), 6); }
-  const aw = 1 + Math.floor((s+1)/2), ax0 = 16 - sh - aw;         // bras
   for (let y = 11; y <= 21; y++){
     const off = y > 16 ? 1 : 0, c = y <= 14 ? 7 : y === 21 ? 12 : 8;
     span(y, ax0 - off, ax0 + aw - 1 - off, c);
@@ -209,23 +225,31 @@ function avatarSVG(stage, px, outfit = S.outfit || {}){
   if (s >= 3){ for (let x = 16 - sh + 2; x <= 15 + sh - 2; x++) if (x !== 15 && x !== 16) g[13][x] = 4; }
   if (s >= 4){ for (let y = 15; y <= 19; y += 2) { g[y][14] = 4; g[y][17] = 4; } }
   if (s >= 5){ g[11][16-sh] = 4; g[11][15+sh] = 4; }
-  for (let y = 20; y <= 23; y++) sym(y, wa + 1, 3);               // short / ceinture
-  const lw = 2 + Math.floor(s/2);                                 // jambes
+  for (let y = 20; y <= 23; y++) sym(y, wa + 1, 3);
   for (let y = 24; y <= 32; y++){ span(y, 15 - lw, 15, 10); span(y, 16, 16 + lw, 10); g[y][15] = 11; }
   for (let y = 33; y <= 34; y++){ span(y, 14 - lw, 15, 5); span(y, 16, 17 + lw, 5); }
-  const out = g.map(r => r.slice());                              // contour automatique
+  // accessoires
+  const top = it.top, bot = it.bottom;
+  if (top.v === 'coat'){ for (let y = 10; y <= 13; y++){ g[y][14] = 26; g[y][17] = 26; } span(14, 14, 15, 26); g[15][15] = 26; }
+  if (it.belt.v === 'champ'){ sym(20, wa + 1, 28); span(19, 14, 17, 28); span(20, 15, 16, 24); span(21, 14, 17, 28); }
+  if (bot.v === 'stripe') for (let y = 20; y <= 32; y++) for (let x = 0; x < W; x++) if ((g[y][x] === 3 || g[y][x] === 10) && x % 2 === 0) g[y][x] = 27;
+  if (it.face.v === 'shades'){ span(5, 13, 15, 25); span(5, 16, 18, 25); span(6, 13, 14, 25); span(6, 17, 18, 25); }
+  if (it.head.v === 'cap'){ sym(1, 3, 20); sym(2, 4, 20); span(3, 12, 22, 20); }
+  if (it.head.v === 'band'){ sym(3, 4, 21); g[3][15] = 24; g[3][16] = 24; }
+  if (it.head.v === 'hat'){ sym(0, 2, 22); sym(1, 3, 22); sym(2, 3, 30); span(3, 10, 21, 22); }
+  if (it.head.v === 'crown'){ span(0, 13, 13, 23); span(0, 18, 18, 23); span(0, 15, 16, 23); span(1, 13, 18, 23); sym(2, 3, 23); g[2][15] = 24; g[2][16] = 24; g[2][13] = 31; g[2][18] = 31; }
+  const out = g.map(r => r.slice());
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++){
     if (g[y][x]) continue;
     if ([[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy]) => g[y+dy]?.[x+dx] > 0)) out[y][x] = 9;
   }
-  // couleurs selon la tenue
   const SKIN = '#f2c79a', SKD = '#d39a6a';
-  const top = wItem('top', outfit.top), bot = wItem('bottom', outfit.bottom);
-  const isTee = top.v.startsWith('tee'), isPull = top.v.startsWith('pull'), isPant = bot.v.startsWith('pant');
-  const COL = {1:SKIN, 2:'#4a2e1a', 3:bot.c, 4:SKD, 5:'#f5f1e6', 6:SKIN, 7:SKIN, 8:SKIN, 9:'#0d1230', 10:SKIN, 11:SKD, 12:SKIN};
-  if (isTee || isPull){ COL[6] = COL[7] = top.c; COL[4] = shade(top.c); }
-  if (isPull) COL[8] = top.c;
-  if (isPant){ COL[10] = bot.c; COL[11] = shade(bot.c); }
+  const COL = {1:SKIN, 2:'#4a2e1a', 3:bot.c, 4:SKD, 5:it.shoes.v === 'gold' ? '#ffd23f' : '#f5f1e6', 6:SKIN, 7:SKIN, 8:SKIN, 9:'#0d1230', 10:SKIN, 11:SKD, 12:SKIN,
+    20:'#ff5d5d', 21:'#f5f1e6', 22:'#8a5a2b', 23:'#ffd23f', 24:'#ff3b5c', 25:'#111111', 26:'#4fc3ff', 27:'#f5f1e6', 28:'#e0a800', 29:'#c0392b', 30:'#4a2e1a', 31:'#4fc3ff'};
+  const isTee = top.v.startsWith('tee'), isLong = top.v.startsWith('pull') || top.v === 'coat';
+  if (isTee || isLong){ COL[6] = COL[7] = top.c; COL[4] = shade(top.c, .85); }
+  if (isLong) COL[8] = top.c;
+  if (bot.v.startsWith('pant') || bot.v === 'stripe'){ COL[10] = bot.c; COL[11] = shade(bot.c); }
   let r = '';
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (out[y][x]) r += `<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="${COL[out[y][x]]}"/>`;
   return `<div class="avatar"><svg width="${px}" height="${px*H/W}" viewBox="0 0 ${W} ${H}">${r}</svg></div>`;
@@ -233,12 +257,18 @@ function avatarSVG(stage, px, outfit = S.outfit || {}){
 let wardOpen = false;
 document.addEventListener('toggle', e => { if (e.target.id === 'wardrobe') wardOpen = e.target.open; }, true);
 function wardrobeWin(){
-  const o = Object.assign({top:'none', bottom:'short-0'}, S.outfit);
-  const sw = (part, it) => `<button class="sw ${o[part]===it.v?'on':''}" data-act="outfit" data-part="${part}" data-v="${it.v}" title="${it.label}" aria-label="${it.label}">
-      ${avatarSVG(2, 34, Object.assign({}, o, {[part]: it.v}))}</button>`;
-  const grp = (part, prefix, title) => `<div class="small muted">${title}</div><div class="row wrap" style="gap:6px">${WARDROBE[part].filter(i => i.v.startsWith(prefix)).map(i => sw(part, i)).join('')}</div>`;
-  return `<details class="win flat" id="wardrobe" ${wardOpen?'open':''}><summary>Garde-robe · ${wItem('top',o.top).label}, ${wItem('bottom',o.bottom).label}</summary><div class="col" style="gap:8px">
-    ${grp('top','none','Haut')}${grp('top','tee','T-shirts')}${grp('top','pull','Pulls')}${grp('bottom','short','Shorts')}${grp('bottom','pant','Pantalons')}</div></details>`;
+  const o = Object.assign({}, OUTFIT0, S.outfit);
+  const sw = (part, it) => {
+    if (!unlocked(it)) return `<div class="sw lock" title="${it.label}"><span class="ttl" style="font-size:7px">🔒 NIV ${it.lvl}</span><span class="small">${it.label}</span></div>`;
+    const on = wItem(part, o[part]).v === it.v;
+    const v = on && it.lvl && OUTFIT0[part] !== it.v ? OUTFIT0[part] : it.v;   // retoucher une récompense portée = l'enlever
+    return `<button class="sw ${on?'on':''}" data-act="outfit" data-part="${part}" data-v="${v}" title="${it.label}" aria-label="${it.label}">${avatarSVG(2, 34, Object.assign({}, o, {[part]: it.v}))}</button>`;
+  };
+  const grp = (part, prefix, title) => `<div class="small muted">${title}</div><div class="row wrap" style="gap:6px">${WARDROBE[part].filter(i => !i.lvl && i.v.startsWith(prefix)).map(i => sw(part, i)).join('')}</div>`;
+  const rew = `<div class="small muted">Récompenses de niveau</div><div class="row wrap" style="gap:6px">${REWARDS.map(i => sw(i.part, i)).join('')}</div>`;
+  const next = REWARDS.find(i => !unlocked(i));
+  return `<details class="win flat" id="wardrobe" ${wardOpen?'open':''}><summary>Garde-robe${next ? ` · prochaine récompense au niveau ${next.lvl}` : ''}</summary><div class="col" style="gap:8px">
+    ${rew}${grp('top','none','Haut')}${grp('top','tee','T-shirts')}${grp('top','pull','Pulls')}${grp('bottom','short','Shorts')}${grp('bottom','pant','Pantalons')}</div></details>`;
 }
 
 /* ================= Composants ================= */
@@ -312,6 +342,10 @@ function viewJour(snap){
      ${check(done)}<div class="grow col"><div class="row"><span class="grow qt name">${title}</span><span class="xp">${xp}</span></div>
      ${meta ? `<div class="muted small">${meta}</div>` : ''}${extra}</div></div>`;
 
+  const tq = (S.tquests || []).find(x => x.date === t);
+  const qPerso = tq ? `<div class="quest ${tq.done?'dn':''}">${check(!!tq.done,'tqDone',`data-id="${tq.id}"`)}<div class="grow col">
+     <div class="row"><span class="grow qt name">${esc(tq.text)}</span><span class="xp">+${RULES.queteDemain}</span></div>
+     <div class="row"><span class="chip" style="background:var(--${tq.stat})">${STATS.find(x=>x.k===tq.stat).abbr}</span><span class="muted small">Ta quête, écrite hier</span></div></div></div>` : '';
   const retour = retourToday() ? `<div class="banner">★ QUÊTE RETOUR ★<br>Bon retour ! Toute l'XP gagnée aujourd'hui compte double.</div>` : '';
 
   const qSeance = w
@@ -337,8 +371,20 @@ function viewJour(snap){
   return `<div class="row"><div class="grow"><div class="ttl big">Quêtes du jour</div><div class="muted">${longDate(t)}</div></div>
      <div class="center"><div class="num big" style="color:var(--accent)">+${snap.todayXP} XP</div><div class="muted small">aujourd'hui</div></div></div>
    ${retour}
-   <div class="win"><div class="ttl" style="color:var(--accent)">QUOTIDIENNES</div>${qSeance}${qRev}${qLect}${qPuz}${qKcal}</div>
+   <div class="win"><div class="ttl" style="color:var(--accent)">QUOTIDIENNES</div>${qPerso}${qSeance}${qRev}${qLect}${qPuz}${qKcal}</div>
+   ${tomorrowWin()}
    ${weekWin()}`;
+}
+function tomorrowWin(){
+  const d = addDays(today(), 1), tq = (S.tquests || []).find(x => x.date === d);
+  if (tq) return `<div class="win flat"><div class="ttl" style="font-size:9px;color:var(--accent)">QUÊTE DE DEMAIN</div>
+    <div class="row"><span class="chip" style="background:var(--${tq.stat})">${STATS.find(x=>x.k===tq.stat).abbr}</span><span class="grow name">${esc(tq.text)}</span><span class="xp">+${RULES.queteDemain}</span></div>
+    <button class="btn sm ghost" data-act="tqDel" data-id="${tq.id}">Modifier / supprimer</button></div>`;
+  return `<div class="win flat col"><div class="ttl" style="font-size:9px;color:var(--accent)">ÉCRIRE LA QUÊTE DE DEMAIN</div>
+    <div class="muted small">Une tâche précise pour demain. Réussie demain : +${RULES.queteDemain} XP dans la stat choisie.</div>
+    <input placeholder="Ex. lire 100 pages de Karamazov" data-in="tqtext" maxlength="120">
+    <div class="row"><select data-in="tqstat" class="sel">${STATS.map(x => `<option value="${x.k}">${x.name}</option>`).join('')}</select>
+    <button class="btn" data-act="tqAdd">Créer</button></div></div>`;
 }
 function weekWin(){
   const wk = weekKey(today()); const n = S.workouts.filter(w => weekKey(w.date) === wk).length;
@@ -515,9 +561,10 @@ function viewReglages(){
      Force : ${RULES.seance} XP/séance, +${RULES.semaine4} à la 4e séance de la semaine, +${RULES.record} par record (charge plus lourde avec toutes les séries réussies).<br>
      Savoir : ${RULES.pomo} XP par 25 min de révision, ${RULES.etapeCours} XP par étape de cours, +${RULES.examen} par examen. Sagesse : ${RULES.page} XP/page, +${RULES.livre} par livre.<br>
      Stratégie : ${RULES.puzzles} XP par série de 10 puzzles. Vitalité : ${RULES.kcal} XP si ${RULES.kcalSeuil} kcal.<br>
+     Quête du lendemain réussie : +${RULES.queteDemain} XP. Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v0.2.2</div>`;
+   <div class="muted small center">Life RPG · prototype v0.3</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -529,6 +576,7 @@ function render(){
   // Séance d'un jour passé jamais commencée : on l'oublie
   if (S.cur && S.cur.date !== today() && !Object.values(S.cur.ex).some(e => e.sets.some(x => x))) S.cur = null;
   const snap = snapshot(), r = route();
+  persoLvl = snap.perso;
   const y = window.scrollY;
   document.getElementById('app').innerHTML = VIEWS[r](snap);
   const parent = {sagesse:'fiche', strategie:'fiche', vitalite:'fiche', reglages:'fiche'}[r] || r;
@@ -536,7 +584,11 @@ function render(){
   if (render.keepScroll) window.scrollTo(0, y); render.keepScroll = false;
   // Montée de niveau ?
   if (lastLevels){ for (const s of STATS) if (snap.lv[s.k].lvl > lastLevels[s.k]) toast(`★ ${s.name} niveau ${snap.lv[s.k].lvl} ! ★`, 'lvl', 4000); }
-  lastLevels = Object.fromEntries(STATS.map(s => [s.k, snap.lv[s.k].lvl]));
+  if (lastLevels && snap.perso > lastLevels.perso){
+    const rw = REWARDS.filter(i => i.lvl > lastLevels.perso && i.lvl <= snap.perso).map(i => i.label).join(', ');
+    toast(`★ Niveau ${snap.perso} !${rw ? ' Récompense : ' + rw : ''} ★`, 'lvl', 5000);
+  }
+  lastLevels = Object.fromEntries(STATS.map(s => [s.k, snap.lv[s.k].lvl])); lastLevels.perso = snap.perso;
 }
 function commit(){ save(); render.keepScroll = true; render(); }
 let toastT;
@@ -554,7 +606,11 @@ const ACTS = {
   pomo(el){ const n = +el.dataset.n, t = today(), c = S.pomo[t] || 0; S.pomo[t] = c >= n ? n-1 : n; if (S.pomo[t] > c) toast(`+${RULES.pomo} XP Savoir`); },
   pomoPlus(){ const t = today(); S.pomo[t] = (S.pomo[t] || 0) + 1; toast(`+${RULES.pomo} XP Savoir`); },
   pomoMinus(){ const t = today(); S.pomo[t] = Math.max(0, (S.pomo[t] || 0) - 1); },
-  outfit(el){ S.outfit = Object.assign({top:'none', bottom:'short-0'}, S.outfit, {[el.dataset.part]: el.dataset.v}); },
+  tqAdd(){ const text = val('tqtext'); if (!text) return toast('Écris ta quête'); const d = addDays(today(), 1);
+    S.tquests = (S.tquests || []).filter(x => x.date !== d); S.tquests.push({id:uid(), date:d, stat: val('tqstat') || 'sag', text, done:null}); toast('Quête prête pour demain'); },
+  tqDel(el){ const q = S.tquests.find(x => x.id === el.dataset.id); S.tquests = S.tquests.filter(x => x !== q); setTimeout(() => { const i = document.querySelector('[data-in=tqtext]'); if (i && q) { i.value = q.text; document.querySelector('[data-in=tqstat]').value = q.stat; } }, 0); },
+  tqDone(el){ const q = S.tquests.find(x => x.id === el.dataset.id); q.done = q.done ? null : today(); if (q.done) toast(`Quête réussie ! +${RULES.queteDemain} XP`); },
+  outfit(el){ S.outfit = Object.assign({}, S.outfit, {[el.dataset.part]: el.dataset.v}); },
   pages(el){
     const id = el.dataset.id || (S.books.find(b => !b.done) || {}).id; if (!id) return;
     const n = +el.dataset.n; S.pages.push({id:uid(), date:today(), book:id, n}); toast(`+${n} XP Sagesse`);
