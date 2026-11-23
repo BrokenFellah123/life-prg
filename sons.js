@@ -65,21 +65,23 @@ const SOUNDS = {
     },
   },
   clinic: {
+    // Inspirés d'appareils médicaux : scope ECG, oxymètre de pouls, pousse-seringue, défibrillateur, alarmes normalisées
     quete: {
-      A: () => tone({f:1000, d:0.14, v:0.22}),
-      B: () => { tone({f:880, d:0.08, v:0.2}); tone({f:1320, t:0.09, d:0.14, v:0.2}); },
+      A: () => tone({f:960, d:0.09, v:0.22, a:0.002}),                                              // bip QRS du scope ECG
+      B: () => { tone({f:55, f2:40, d:0.12, v:0.5}); tone({f:1050, t:0.01, d:0.08, v:0.2, a:0.002}); }, // battement + bip de saturomètre
     },
     onglet: {
-      A: () => tone({f:440, d:0.04, v:0.18}),
-      B: () => tone({f:620, type:'triangle', d:0.03, v:0.22}),
+      A: () => tone({f:2000, type:'square', d:0.02, v:0.05, a:0.001}),                               // touche de moniteur
+      B: () => tone({f:1250, type:'triangle', d:0.018, v:0.2, a:0.001}),                              // clic d'écran tactile médical
     },
     attribut: {
-      A: () => { tone({f:1000, d:0.05, v:0.18}); tone({f:1000, t:0.09, d:0.05, v:0.18}); },
-      B: () => { tone({f:800, d:0.05, v:0.18}); tone({f:1200, t:0.08, d:0.06, v:0.18}); },
+      A: () => { tone({f:1400, d:0.04, v:0.18, a:0.002}); tone({f:1400, t:0.08, d:0.04, v:0.18, a:0.002}); },   // validation pousse-seringue
+      B: () => { tone({f:880, d:0.06, v:0.18, a:0.002}); tone({f:1175, t:0.07, d:0.07, v:0.18, a:0.002}); },  // saturomètre qui remonte
     },
     niveau: {
-      A: () => [880, 1100, 1320].forEach((f, i) => tone({f, t:i*0.16, d:i === 2 ? 0.4 : 0.1, v:0.2})),
-      B: () => [523, 659, 784].forEach(f => tone({f, d:1.1, v:0.1, a:0.06})),
+      A: () => { tone({f:300, f2:2800, type:'sawtooth', d:1.1, v:0.035, a:0.05}); tone({f:300, f2:2800, d:1.1, v:0.08, a:0.05});
+                 [0, 0.18].forEach(t => tone({f:1600, t:1.2 + t, d:0.12, v:0.2, a:0.002})); },           // charge du défibrillateur puis « prêt »
+      B: () => [[523,0],[659,0.2],[784,0.4],[784,0.85],[1047,1.05]].forEach(([f,t]) => tone({f, type:'triangle', t, d:0.16, v:0.22, a:0.01})), // mélodie d'alarme normalisée
     },
   },
 };

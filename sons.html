@@ -30,14 +30,16 @@
   <h1>Choisis tes sons</h1>
   <p>Pour chaque thème et chaque action, écoute la version A puis la version B, et dis-moi laquelle tu préfères (par exemple « Pixel : quête A, onglet B… »).</p>
   <div class="warn">Sur iPhone : désactive le mode silencieux (bouton sur le côté) et monte le volume, sinon tu n'entendras rien.</div>
+  <div class="warn" style="background:#3ad1c5">Pixel et Échiquier : tes choix sont notés. Il reste à choisir les nouveaux sons du Moniteur clinique, en bas.</div>
   <div id="list"></div>
 </main>
 <script src="sons.js"></script>
 <script>
+const PICK = {pixel:{quete:'A',onglet:'B',attribut:'B',niveau:'B'}, chess:{quete:'A',onglet:'B',attribut:'A',niveau:'B'}};
 const NAMES = {pixel:'Pixel 16 bits', chess:'Échiquier de tournoi', clinic:'Moniteur clinique'};
 const ACTS = {quete:'Valider une quête', onglet:'Changer d’onglet', attribut:'Toucher un attribut (Fiche)', niveau:'Monter de niveau'};
-document.getElementById('list').innerHTML = Object.keys(SOUNDS).map(t => `<section class="${t}"><h2>${NAMES[t]}</h2>
-  ${Object.keys(ACTS).map(a => `<div class="act"><span>${ACTS[a]}</span><button data-t="${t}" data-a="${a}" data-v="A">A</button><button data-t="${t}" data-a="${a}" data-v="B">B</button></div>`).join('')}
+document.getElementById('list').innerHTML = Object.keys(SOUNDS).map(t => `<section class="${t}"><h2>${NAMES[t]}${t==='clinic' ? ' · nouveaux sons médicaux' : ''}</h2>
+  ${Object.keys(ACTS).map(a => `<div class="act"><span>${ACTS[a]}</span>${PICK[t] ? `<button data-t="${t}" data-a="${a}" data-v="${PICK[t][a]}" style="width:136px">${PICK[t][a]} ✓ choisi</button>` : `<button data-t="${t}" data-a="${a}" data-v="A">A</button><button data-t="${t}" data-a="${a}" data-v="B">B</button>`}</div>`).join('')}
   </section>`).join('');
 document.addEventListener('click', e => { const b = e.target.closest('button[data-t]'); if (b) SOUNDS[b.dataset.t][b.dataset.a][b.dataset.v](); });
 </script>
