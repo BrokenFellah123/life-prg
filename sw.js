@@ -1,0 +1,17 @@
+/* Hors ligne : l'appli se charge depuis le cache, puis se met à jour en arrière-plan.
+   Changer VERSION à chaque mise en ligne pour forcer le renouvellement du cache. */
+const VERSION = 'liferpg-0.2.1';
+const FILES = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest',
+  'fonts/pressstart2p.woff2', 'fonts/vt323.woff2', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
+self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES))); self.skipWaiting(); });
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+});
+self.addEventListener('fetch', e => {
+  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return;
+  e.respondWith(caches.open(VERSION).then(async c => {
+    const hit = await c.match(e.request, {ignoreSearch: true});
+    const net = fetch(e.request).then(r => { if (r.ok) c.put(e.request, r.clone()); return r; }).catch(() => hit);
+    return hit || net;
+  }));
+});
