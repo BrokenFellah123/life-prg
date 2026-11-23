@@ -231,3 +231,6 @@ html[data-theme=clinic]{
 [data-theme=chess] .num,[data-theme=clinic] .num{font-size:15px!important;line-height:1.3}
 [data-theme=chess] .num.big,[data-theme=clinic] .num.big{font-size:20px!important}
 [data-theme=chess] input.kg,[data-theme=chess] input.mid,[data-theme=clinic] input.kg,[data-theme=clinic] input.mid{font-size:17px}
+#hero.hop{animation:hop .9s steps(6) 1}
+@keyframes hop{0%,100%{transform:translateY(0)}25%{transform:translateY(-4px)}50%{transform:translateY(0)}70%{transform:translateY(-2px)}}
+@media (prefers-reduced-motion:reduce){#hero.hop{animation:none}}

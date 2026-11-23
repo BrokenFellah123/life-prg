@@ -214,7 +214,7 @@ const unlocked = it => !it.lvl || persoLvl >= it.lvl;
 const wItem = (part, v) => { const it = WARDROBE[part].find(x => x.v === v); return it && unlocked(it) ? it : WARDROBE[part].find(x => x.v === OUTFIT0[part]); };
 const shade = (hex, f=.75) => '#' + [1,3,5].map(i => Math.round(parseInt(hex.slice(i,i+2),16)*f).toString(16).padStart(2,'0')).join('');
 
-function avatarSVG(stage, px, outfit = S.outfit || {}){
+function avatarSVG(stage, px, outfit = S.outfit || {}, pose = ''){
   const o = Object.assign({}, OUTFIT0, outfit);
   const it = {}; for (const k in OUTFIT0) it[k] = wItem(k, o[k]);
   const W = 32, H = 36, g = Array.from({length:H}, () => Array(W).fill(0));
@@ -228,12 +228,27 @@ function avatarSVG(stage, px, outfit = S.outfit || {}){
   for (let y = 2; y <= 8; y++) sym(y, y===2||y===8 ? 2 : 3, 1);   // tête
   sym(2, 3, 2); sym(3, 3, 2); span(4, 12, 12, 2); span(4, 19, 19, 2);
   g[5][14] = 2; g[5][17] = 2;
+  if (pose === 'wink'){ g[5][14] = 1; span(5, 13, 14, 2); }   // clin d'œil
   sym(9, 1 + (s >= 4 ? 1 : 0), 1);
   for (let y = 10; y <= 19; y++){ const t = (y-10)/9; sym(y, Math.round(sh + (wa - sh)*t*t), 6); }
   for (let y = 11; y <= 21; y++){
     const off = y > 16 ? 1 : 0, c = y <= 14 ? 7 : y === 21 ? 12 : 8;
-    span(y, ax0 - off, ax0 + aw - 1 - off, c);
-    span(y, 31 - (ax0 + aw - 1 - off), 31 - (ax0 - off), c);
+    if (pose !== 'flex') span(y, ax0 - off, ax0 + aw - 1 - off, c);
+    if (pose !== 'flex' && pose !== 'thumb') span(y, 31 - (ax0 + aw - 1 - off), 31 - (ax0 - off), c);
+  }
+  if (pose === 'thumb'){   // bras droit levé, pouce en l'air
+    const x0 = 31 - (ax0 + aw - 1), x1 = 31 - ax0;
+    for (let y = 4; y <= 11; y++) span(y, x0, x1, y >= 9 ? 7 : 8);
+    span(2, x0, x1, 12); span(3, x0, x1, 12); g[1][x0] = 12; g[0][x0] = 12;
+  }
+  if (pose === 'flex'){    // double biceps
+    for (const side of [0, 1]){
+      const m = x => side ? 31 - x : x;
+      for (let y = 11; y < 11 + aw; y++) for (let x = ax0 - aw; x <= ax0 + aw - 1; x++) g[y][m(x)] = 7;
+      for (let y = 5; y <= 10; y++) for (let x = ax0 - aw; x <= ax0 - 1; x++) g[y][m(x)] = 8;
+      for (let y = 3; y <= 4; y++) for (let x = ax0 - aw; x <= ax0 - 1; x++) g[y][m(x)] = 12;
+      if (s >= 3) g[10][m(ax0 - 1)] = 4;
+    }
   }
   if (s >= 3){ for (let x = 16 - sh + 2; x <= 15 + sh - 2; x++) if (x !== 15 && x !== 16) g[13][x] = 4; }
   if (s >= 4){ for (let y = 15; y <= 19; y += 2) { g[y][14] = 4; g[y][17] = 4; } }
@@ -436,7 +451,7 @@ function viewFiche(snap){
       <div class="grow col" style="gap:4px"><div class="row"><span class="grow name" style="font-weight:500">${s.name}</span><span class="num" style="color:var(--${s.k});font-size:19px">${l.xp} XP</span><span class="ttl" style="color:var(--${s.k})">NIV ${l.lvl}</span></div>
       ${bar(l.into/l.cost, s.k)}<div class="row muted small"><span class="grow">${s.sub}${eloV}</span><span class="num" style="font-size:17px">niv. ${l.lvl+1} : ${l.into}/${l.cost}</span></div></div></a>`;
   }).join('');
-  return `<div class="win row" style="gap:14px">${avatarSVG(st, 72)}
+  return `<div class="win row" style="gap:14px"><div id="hero">${avatarSVG(st, 72)}</div>
      <div class="grow col"><div class="ttl xl">${esc(S.name)}</div><div class="muted small">Stade ${st+1}/6 · ${STAGES[st]}</div>
      <div class="row wrap"><span class="ttl" style="white-space:nowrap">NIV. ${snap.perso}</span><span class="chip off">somme des niveaux ÷ 5</span></div></div></div>
    ${wardrobeWin()}
@@ -616,7 +631,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v0.8</div>`;
+   <div class="muted small center">Life RPG · prototype v0.8.1</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -777,5 +792,13 @@ window.addEventListener('hashchange', () => { window.scrollTo(0,0); render(); })
 // Repasser sur l'appli le lendemain : rafraîchir la date
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
 
+/* Petite animation de l'avatar sur la Fiche, toutes les ~20 s (pouce, clin d'œil, biceps) */
+let poseI = 0;
+setInterval(() => {
+  const el = document.getElementById('hero'); if (!el || document.hidden) return;
+  const st = stageOf(snapshot().lv.for.lvl), pose = ['thumb', 'wink', 'flex'][poseI++ % 3];
+  el.innerHTML = avatarSVG(st, 72, S.outfit, pose); el.classList.add('hop');
+  setTimeout(() => { el.classList.remove('hop'); if (document.getElementById('hero') === el) el.innerHTML = avatarSVG(st, 72); }, 900);
+}, 20000);
 load(); migrate(); render();
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js', {updateViaCache:'none'});
