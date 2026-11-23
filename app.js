@@ -1,4 +1,4 @@
-/* Life RPG — prototype v0.3
+/* Life RPG — prototype v0.4
    Principe : on n'enregistre que des actions réelles (séances, étapes de cours, pages, puzzles, kcal).
    L'XP et les niveaux sont RECALCULÉS à partir de ces actions à chaque affichage :
    changer une règle d'XP plus tard s'applique donc à tout l'historique, sans migration. */
@@ -13,7 +13,6 @@ const RULES = {
   etapeCours: 20,      // XP par étape de cours (provisoire)
   pomo: 10,            // XP par bloc de 25 min de révision
   examen: 200,         // bonus par examen réussi
-  revisionJours: 7,    // « révisé J+7 » : disponible 7 jours après le quiz
   page: 1,             // XP par page lue
   livre: 100,          // bonus par livre fini
   puzzles: 5,          // XP par série de 10 puzzles (à affiner)
@@ -76,7 +75,8 @@ const blank = () => ({
   cur:null,         // séance en cours
   loads:{},         // charge prévue pour la prochaine séance, par exercice
   rest:[],          // jours de repos prévus (dates)
-  courses:[],       // {id,name,url,steps:{lu,fiche,quiz,rev}}
+  courses:[],       // {id,name,url,folder,steps:{lu,fiche,quiz,rev}} (fiche = Appris, rev = Maîtrisé)
+  folders:[],       // {id,name,parent}
   exams:[],         // {id,name,passed}
   pomo:{},          // date → nombre de blocs de 25 min
   outfit:{},
@@ -124,7 +124,7 @@ function computeEvents(){
     }
   }
   // Savoir
-  const SN = {lu:'lu', fiche:'fiché', quiz:'quiz réussi', rev:'révisé J+7'};
+  const SN = {lu:'lu', fiche:'appris', quiz:'quiz réussi', rev:'maîtrisé'};
   for (const c of S.courses) for (const k in SN) if (c.steps[k]) push(c.steps[k], 'sav', RULES.etapeCours, `${c.name} : ${SN[k]}`);
   for (const d in S.pomo) if (S.pomo[d] > 0) push(d, 'sav', S.pomo[d]*RULES.pomo, `Révision : ${S.pomo[d]} × 25 min`);
   for (const q of S.tquests || []) if (q.done) push(q.done, q.stat, RULES.queteDemain, `Quête du jour : ${q.text}`);
@@ -337,7 +337,6 @@ function viewJour(snap){
   const kc = S.kcal[t] || '';
   const pomo = S.pomo[t] || 0;
   const book = S.books.find(b => !b.done);
-  const dueRev = S.courses.filter(c => c.steps.quiz && !c.steps.rev && diffDays(c.steps.quiz, t) >= RULES.revisionJours);
   const q = (k, done, title, meta, xp, extra='') => `<div class="quest ${done?'dn':''}">
      ${check(done)}<div class="grow col"><div class="row"><span class="grow qt name">${title}</span><span class="xp">${xp}</span></div>
      ${meta ? `<div class="muted small">${meta}</div>` : ''}${extra}</div></div>`;
@@ -355,7 +354,7 @@ function viewJour(snap){
       : q('for', false, `Séance ${PROGRAM[type].name}`, `${PROGRAM[type].ex.length} exercices · 10 min de course avant et après`, `+${RULES.seance}`,
           `<div class="row wrap"><a class="btn sm pri" href="#force">Ouvrir la séance</a><button class="btn sm ghost" data-act="rest">Repos prévu</button></div>`);
 
-  const qRev = q('sav', pomo >= 2, '2 × 25 min de révision', dueRev.length ? `À réviser (J+7) : ${dueRev.map(c => esc(c.name)).join(', ')}` : `${pomo} × 25 min aujourd'hui · +${RULES.pomo} XP par bloc, + les étapes de cours`, `+${2*RULES.pomo}`, pomoRow(pomo));
+  const qRev = q('sav', pomo >= 2, '2 × 25 min de révision', `${pomo} × 25 min aujourd'hui · +${RULES.pomo} XP par bloc, + les étapes de cours`, `+${2*RULES.pomo}`, pomoRow(pomo));
 
   const qLect = q('sag', pagesT >= RULES.objectifPages, `${RULES.objectifPages} pages de lecture`,
      book ? `${esc(book.title)} · ${pagesT} page${pagesT>1?'s':''} aujourd'hui` : 'Aucun livre en cours', `+${RULES.objectifPages}`,
@@ -466,21 +465,30 @@ function chargesTable(){
 function pomoRow(pomo, link=true){
   return `<div class="row wrap">${check(pomo>=1,'pomo','data-n="1"')}${check(pomo>=2,'pomo','data-n="2"')}<button class="btn sm" data-act="pomoPlus">+25 min</button>${pomo>2?`<button class="btn sm ghost" data-act="pomoMinus">−</button>`:''}${link?'<a class="link" href="#savoir">Mes cours ›</a>':''}</div>`;
 }
-function viewSavoir(snap){
+function folderStats(fid){
+  // cours maîtrisés / total, sous-dossiers compris
+  let tot = 0, done = 0;
+  const walk = id => { S.courses.filter(c => (c.folder || null) === id).forEach(c => { tot++; if (c.steps.rev) done++; });
+    S.folders.filter(f => f.parent === id).forEach(f => walk(f.id)); };
+  walk(fid); return {tot, done};
+}
+function viewSavoir(snap, arg){
   const t = today();
-  const STEPS = [['lu','LU'],['fiche','FICHÉ'],['quiz','QUIZ OK'],['rev','J+7']];
-  const courses = S.courses.map(c => {
-    const revOpen = c.steps.quiz && diffDays(c.steps.quiz, t) >= RULES.revisionJours;
-    const steps = STEPS.map(([k,l]) => {
-      const lock = k === 'rev' && !c.steps.rev && !revOpen;
-      const lab = lock && c.steps.quiz ? `J+7<br>${shortDate(addDays(c.steps.quiz, RULES.revisionJours))}` : l;
-      return `<button class="step ${c.steps[k]?'on':''}" data-act="step" data-id="${c.id}" data-k="${k}" ${lock?'disabled':''}>${lab}</button>`;
-    }).join('');
+  const fid = arg && S.folders.some(f => f.id === arg) ? arg : null;
+  const STEPS = [['lu','LU'],['fiche','APPRIS'],['quiz','QUIZ'],['rev','MAÎTRISÉ']];
+  // fil d'Ariane
+  const path = []; for (let f = S.folders.find(x => x.id === fid); f; f = S.folders.find(x => x.id === f.parent)) path.unshift(f);
+  const crumbs = `<div class="row wrap" style="gap:4px"><a class="link" href="#savoir">Tous les cours</a>${path.map(f => ` <span class="muted">›</span> <a class="link" href="#savoir/${f.id}">${esc(f.name)}</a>`).join('')}</div>`;
+  const folders = S.folders.filter(f => f.parent === fid).sort((a,b) => a.name.localeCompare(b.name, 'fr')).map(f => { const st = folderStats(f.id);
+    return `<div class="ex"><div class="row"><a href="#savoir/${f.id}" class="row grow" style="color:inherit;text-decoration:none"><span class="ttl" style="color:var(--sav)">▣</span><span class="grow name">${esc(f.name)}</span><span class="num muted">${st.done}/${st.tot}</span><span class="ttl">›</span></a></div></div>`; }).join('');
+  const courses = S.courses.filter(c => (c.folder || null) === fid).map(c => {
+    const steps = STEPS.map(([k,l]) => `<button class="step ${c.steps[k]?'on':''}" data-act="step" data-id="${c.id}" data-k="${k}">${l}</button>`).join('');
     const n = Object.values(c.steps).filter(Boolean).length;
     return `<div class="ex"><div class="row" style="align-items:flex-start"><span class="grow name">${esc(c.name)}</span><span class="num muted">${n}/4</span></div>
       <div class="steps">${steps}</div>
       <div class="row">${c.url ? `<a class="link" href="${esc(c.url)}" target="_blank" rel="noopener">Ouvrir le cours ↗</a>` : `<span class="muted small">Pas de lien</span>`}<span class="grow"></span><button class="btn sm ghost" data-act="delCourse" data-id="${c.id}">Suppr.</button></div></div>`;
   }).join('');
+  const here = fid ? S.folders.find(f => f.id === fid).name : 'Tous les cours';
   const exams = S.exams.map(x => `<div class="row" style="padding:6px 0"><span class="grow name">${esc(x.name)}</span>
      ${x.passed ? `<span class="chip">RÉUSSI ${shortDate(x.passed)}</span><button class="btn sm ghost" data-act="examUndo" data-id="${x.id}">↺</button>`
                 : `<button class="btn sm" data-act="examOk" data-id="${x.id}">Réussi · +${RULES.examen}</button><button class="btn sm ghost" data-act="delExam" data-id="${x.id}">×</button>`}</div>`).join('');
@@ -488,11 +496,15 @@ function viewSavoir(snap){
   return `${statHead('sav', snap)}
    <div class="win flat"><div class="qt">Révision aujourd'hui · ${pomo} × 25 min</div><div class="muted small">+${RULES.pomo} XP par bloc de 25 min</div>${pomoRow(pomo, false)}</div>
    <div class="sec">Mes cours · ${RULES.etapeCours} XP par étape</div>
-   <div class="win flat">${courses || '<div class="muted small">Ajoute ton premier cours ci-dessous.</div>'}</div>
-   <div class="win flat col"><div class="ttl" style="font-size:9px">AJOUTER UN COURS</div>
+   ${crumbs}
+   <div class="win flat">${folders + courses || '<div class="muted small">Dossier vide. Ajoute un dossier ou un cours ci-dessous.</div>'}
+     ${fid ? `<button class="btn sm danger" data-act="delFolder" data-id="${fid}">Supprimer le dossier « ${esc(here)} »</button>` : ''}</div>
+   <div class="win flat col"><div class="ttl" style="font-size:9px">NOUVEAU DOSSIER DANS « ${esc(here).toUpperCase()} »</div>
+     <div class="row"><input placeholder="Nom du dossier" data-in="fname"><button class="btn sm" data-act="addFolder" data-f="${fid || ''}">Créer</button></div></div>
+   <div class="win flat col"><div class="ttl" style="font-size:9px">NOUVEAU COURS DANS « ${esc(here).toUpperCase()} »</div>
      <input placeholder="Nom du cours (ex. Cardio · Insuffisance cardiaque)" data-in="cname">
      <input type="url" placeholder="Lien du fichier (iCloud, Drive…) facultatif" data-in="curl">
-     <button class="btn" data-act="addCourse">Ajouter</button></div>
+     <button class="btn" data-act="addCourse" data-f="${fid || ''}">Ajouter</button></div>
    <div class="sec">Examens · +${RULES.examen} XP si réussi</div>
    <div class="win flat">${exams || '<div class="muted small">Aucun examen.</div>'}
      <div class="row"><input placeholder="Nom de l'examen" data-in="ename"><button class="btn sm" data-act="addExam">+</button></div></div>
@@ -559,26 +571,27 @@ function viewReglages(){
    <div class="win flat col"><div class="qt">Règles actuelles</div><div class="muted small">
      Niveau n d'une stat : 100 × n XP. Niveau perso : somme des 5 niveaux ÷ 5.<br>
      Force : ${RULES.seance} XP/séance, +${RULES.semaine4} à la 4e séance de la semaine, +${RULES.record} par record (charge plus lourde avec toutes les séries réussies).<br>
-     Savoir : ${RULES.pomo} XP par 25 min de révision, ${RULES.etapeCours} XP par étape de cours, +${RULES.examen} par examen. Sagesse : ${RULES.page} XP/page, +${RULES.livre} par livre.<br>
+     Savoir : ${RULES.pomo} XP par 25 min de révision, ${RULES.etapeCours} XP par étape de cours (lu, appris, quiz, maîtrisé), +${RULES.examen} par examen. Sagesse : ${RULES.page} XP/page, +${RULES.livre} par livre.<br>
      Stratégie : ${RULES.puzzles} XP par série de 10 puzzles. Vitalité : ${RULES.kcal} XP si ${RULES.kcalSeuil} kcal.<br>
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v0.3</div>`;
+   <div class="muted small center">Life RPG · prototype v0.4</div>`;
 }
 
 /* ================= Rendu et routage ================= */
 const VIEWS = {jour:viewJour, fiche:viewFiche, force:viewForce, savoir:viewSavoir, sagesse:viewSagesse, strategie:viewStrategie, vitalite:viewVitalite, reglages:viewReglages};
 const TABS = [['jour','Jour'],['fiche','Fiche'],['force','Force'],['savoir','Cours']];
 let lastLevels = null;
-function route(){ const r = location.hash.slice(1); return VIEWS[r] ? r : 'jour'; }
+function route(){ const r = location.hash.slice(1).split('/')[0]; return VIEWS[r] ? r : 'jour'; }
+const routeArg = () => decodeURIComponent(location.hash.slice(1).split('/')[1] || '');
 function render(){
   // Séance d'un jour passé jamais commencée : on l'oublie
   if (S.cur && S.cur.date !== today() && !Object.values(S.cur.ex).some(e => e.sets.some(x => x))) S.cur = null;
   const snap = snapshot(), r = route();
   persoLvl = snap.perso;
   const y = window.scrollY;
-  document.getElementById('app').innerHTML = VIEWS[r](snap);
+  document.getElementById('app').innerHTML = VIEWS[r](snap, routeArg());
   const parent = {sagesse:'fiche', strategie:'fiche', vitalite:'fiche', reglages:'fiche'}[r] || r;
   document.getElementById('tabs').innerHTML = TABS.map(([k,l]) => `<a href="#${k}" class="${k===parent?'on':''}"><i></i>${l}</a>`).join('');
   if (render.keepScroll) window.scrollTo(0, y); render.keepScroll = false;
@@ -628,10 +641,20 @@ const ACTS = {
   puzY(){ S.puzzles.push({id:uid(), date:addDays(today(),-1)}); toast('Ajouté à hier'); },
   unpuz(){ const i = S.puzzles.map(p => p.date).lastIndexOf(today()); if (i >= 0) S.puzzles.splice(i, 1); },
   elo(){ const v = parseInt(val('elo')); if (!(v > 0)) return toast('Elo ?'); const t = today(); S.elo = S.elo.filter(e => e.date !== t); S.elo.push({date:t, v}); },
-  addCourse(){ const name = val('cname'); if (!name) return toast('Nom du cours ?'); S.courses.push({id:uid(), name, url: val('curl'), steps:{lu:null,fiche:null,quiz:null,rev:null}}); },
+  addCourse(el){ const name = val('cname'); if (!name) return toast('Nom du cours ?'); S.courses.push({id:uid(), name, url: val('curl'), folder: el.dataset.f || null, steps:{lu:null,fiche:null,quiz:null,rev:null}}); },
+  addFolder(el){ const name = val('fname'); if (!name) return toast('Nom du dossier ?'); S.folders.push({id:uid(), name, parent: el.dataset.f || null}); },
+  delFolder(el){
+    const ids = []; const walk = id => { ids.push(id); S.folders.filter(f => f.parent === id).forEach(f => walk(f.id)); }; walk(el.dataset.id);
+    const nc = S.courses.filter(c => ids.includes(c.folder)).length, nf = ids.length - 1;
+    const msg = nc || nf ? `Ce dossier contient ${nc} cours et ${nf} sous-dossier(s). Tout supprimer, avec l'XP de ces cours ?` : 'Supprimer ce dossier vide ?';
+    if (!confirm(msg)) return;
+    const parent = S.folders.find(f => f.id === el.dataset.id).parent;
+    S.folders = S.folders.filter(f => !ids.includes(f.id)); S.courses = S.courses.filter(c => !ids.includes(c.folder));
+    location.hash = parent ? 'savoir/' + parent : 'savoir';
+  },
   delCourse(el){ if (confirm('Supprimer ce cours et son XP ?')) S.courses = S.courses.filter(c => c.id !== el.dataset.id); },
   step(el){ const c = S.courses.find(c => c.id === el.dataset.id), k = el.dataset.k;
-    if (c.steps[k]) { c.steps[k] = null; if (k === 'quiz') c.steps.rev = null; } else { c.steps[k] = today(); toast(`+${RULES.etapeCours} XP Savoir`); } },
+    if (c.steps[k]) { c.steps[k] = null; } else { c.steps[k] = today(); toast(`+${RULES.etapeCours} XP Savoir`); } },
   addExam(){ const name = val('ename'); if (!name) return toast('Nom de l\'examen ?'); S.exams.push({id:uid(), name, passed:null}); },
   examOk(el){ S.exams.find(x => x.id === el.dataset.id).passed = today(); toast(`Examen réussi ! +${RULES.examen} XP`); },
   examUndo(el){ S.exams.find(x => x.id === el.dataset.id).passed = null; },
