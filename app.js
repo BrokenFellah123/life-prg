@@ -191,7 +191,9 @@ const WARDROBE = {
   head:   [{v:'none', label:'Rien'},
            {v:'cap',   label:'Casquette', lvl:1},  {v:'band', label:'Bandeau de sport', lvl:2},
            {v:'hat',   label:'Chapeau', lvl:5},    {v:'crown', label:'Couronne de roi', lvl:10}],
-  face:   [{v:'none', label:'Rien'}, {v:'shades', label:'Lunettes noires', lvl:4}],
+  face:   [{v:'none', label:'Sans lunettes'}, {v:'glasses', label:'Lunettes'}, {v:'shades', label:'Lunettes noires', lvl:4}],
+  beard:  [{v:'none', label:'Rasé'}, {v:'must-s', label:'Moustache courte'}, {v:'must-l', label:'Moustache longue'},
+           {v:'beard-s', label:'Barbe courte'}, {v:'beard-l', label:'Barbe longue'}],
   top:    [{v:'none',   label:'Torse nu'},
            {v:'tee-0',  label:'T-shirt blanc', c:'#f5f1e6'}, {v:'tee-1', label:'T-shirt rouge', c:'#ff5d5d'}, {v:'tee-2', label:'T-shirt noir', c:'#2b2d42'},
            {v:'pull-0', label:'Pull gris', c:'#9aa6d6'},     {v:'pull-1', label:'Pull violet', c:'#8e5cff'}, {v:'pull-2', label:'Pull vert', c:'#3fa34d'},
@@ -201,9 +203,11 @@ const WARDROBE = {
            {v:'stripe',  label:'Pantalon rayé', c:'#3b3f8f', lvl:3}],
   belt:   [{v:'none', label:'Rien'}, {v:'champ', label:'Ceinture de champion', lvl:7}],
   back:   [{v:'none', label:'Rien'}, {v:'cape', label:'Cape rouge', lvl:8}],
-  shoes:  [{v:'white', label:'Baskets blanches'}, {v:'gold', label:'Baskets dorées', lvl:9}],
+  shoes:  [{v:'white', label:'Baskets blanches', c:'#f5f1e6'}, {v:'black', label:'Baskets noires', c:'#2b2d42'},
+           {v:'red', label:'Baskets rouges', c:'#ff5d5d'}, {v:'blue', label:'Baskets bleues', c:'#4fc3ff'},
+           {v:'gold', label:'Baskets dorées', c:'#ffd23f', lvl:9}],
 };
-const OUTFIT0 = {head:'none', face:'none', top:'none', bottom:'short-0', belt:'none', back:'none', shoes:'white'};
+const OUTFIT0 = {head:'none', face:'none', beard:'none', top:'none', bottom:'short-0', belt:'none', back:'none', shoes:'white'};
 const REWARDS = Object.entries(WARDROBE).flatMap(([part, l]) => l.filter(i => i.lvl).map(i => ({...i, part}))).sort((a,b) => a.lvl - b.lvl);
 let persoLvl = 0;   // mis à jour à chaque rendu
 const unlocked = it => !it.lvl || persoLvl >= it.lvl;
@@ -242,6 +246,12 @@ function avatarSVG(stage, px, outfit = S.outfit || {}){
   if (top.v === 'coat'){ for (let y = 10; y <= 13; y++){ g[y][14] = 26; g[y][17] = 26; } span(14, 14, 15, 26); g[15][15] = 26; }
   if (it.belt.v === 'champ'){ sym(20, wa + 1, 28); span(19, 14, 17, 28); span(20, 15, 16, 24); span(21, 14, 17, 28); }
   if (bot.v === 'stripe') for (let y = 20; y <= 32; y++) for (let x = 0; x < W; x++) if ((g[y][x] === 3 || g[y][x] === 10) && x % 2 === 0) g[y][x] = 27;
+  const bd = it.beard.v;
+  if (bd === 'beard-s' || bd === 'beard-l'){ [6,7].forEach(y => { g[y][13] = 2; g[y][18] = 2; }); span(8, 14, 17, 2); }
+  if (bd === 'beard-l'){ span(9, 14, 17, 2); span(10, 15, 16, 2); }
+  if (bd === 'must-s' || bd.startsWith('beard')) span(7, 15, 16, 2);
+  if (bd === 'must-l'){ span(7, 14, 17, 2); g[8][14] = 2; g[8][17] = 2; }
+  if (it.face.v === 'glasses'){ [13,15,16,18].forEach(x => g[5][x] = 32); span(6, 13, 18, 32); g[6][14] = 33; g[6][17] = 33; }
   if (it.face.v === 'shades'){ span(5, 13, 15, 25); span(5, 16, 18, 25); span(6, 13, 14, 25); span(6, 17, 18, 25); }
   if (it.head.v === 'cap'){ sym(1, 3, 20); sym(2, 4, 20); span(3, 12, 22, 20); }
   if (it.head.v === 'band'){ sym(3, 4, 21); g[3][15] = 24; g[3][16] = 24; }
@@ -253,8 +263,8 @@ function avatarSVG(stage, px, outfit = S.outfit || {}){
     if ([[1,0],[-1,0],[0,1],[0,-1]].some(([dx,dy]) => g[y+dy]?.[x+dx] > 0)) out[y][x] = 9;
   }
   const SKIN = '#f2c79a', SKD = '#d39a6a';
-  const COL = {1:SKIN, 2:'#4a2e1a', 3:bot.c, 4:SKD, 5:it.shoes.v === 'gold' ? '#ffd23f' : '#f5f1e6', 6:SKIN, 7:SKIN, 8:SKIN, 9:'#0d1230', 10:SKIN, 11:SKD, 12:SKIN,
-    20:'#ff5d5d', 21:'#f5f1e6', 22:'#8a5a2b', 23:'#ffd23f', 24:'#ff3b5c', 25:'#111111', 26:'#4fc3ff', 27:'#f5f1e6', 28:'#e0a800', 29:'#c0392b', 30:'#4a2e1a', 31:'#4fc3ff'};
+  const COL = {1:SKIN, 2:'#4a2e1a', 3:bot.c, 4:SKD, 5:it.shoes.c || '#f5f1e6', 6:SKIN, 7:SKIN, 8:SKIN, 9:'#0d1230', 10:SKIN, 11:SKD, 12:SKIN,
+    20:'#ff5d5d', 21:'#f5f1e6', 22:'#8a5a2b', 23:'#ffd23f', 24:'#ff3b5c', 25:'#111111', 26:'#4fc3ff', 27:'#f5f1e6', 28:'#e0a800', 29:'#c0392b', 30:'#4a2e1a', 31:'#4fc3ff', 32:'#3a3f5c', 33:'#bfe3ff'};
   const isTee = top.v.startsWith('tee'), isLong = top.v.startsWith('pull') || top.v === 'coat';
   if (isTee || isLong){ COL[6] = COL[7] = top.c; COL[4] = shade(top.c, .85); }
   if (isLong) COL[8] = top.c;
@@ -277,7 +287,7 @@ function wardrobeWin(){
   const rew = `<div class="small muted">Récompenses de niveau</div><div class="row wrap" style="gap:6px">${REWARDS.map(i => sw(i.part, i)).join('')}</div>`;
   const next = REWARDS.find(i => !unlocked(i));
   return `<details class="win flat" id="wardrobe" ${wardOpen?'open':''}><summary>Garde-robe${next ? ` · prochaine récompense au niveau ${next.lvl}` : ''}</summary><div class="col" style="gap:8px">
-    ${rew}${grp('top','none','Haut')}${grp('top','tee','T-shirts')}${grp('top','pull','Pulls')}${grp('bottom','short','Shorts')}${grp('bottom','pant','Pantalons')}</div></details>`;
+    ${rew}${grp('beard','','Pilosité')}${grp('face','','Lunettes')}${grp('shoes','','Chaussures')}${grp('top','none','Haut')}${grp('top','tee','T-shirts')}${grp('top','pull','Pulls')}${grp('bottom','short','Shorts')}${grp('bottom','pant','Pantalons')}</div></details>`;
 }
 
 /* ================= Composants ================= */
@@ -606,7 +616,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v0.7.1</div>`;
+   <div class="muted small center">Life RPG · prototype v0.8</div>`;
 }
 
 /* ================= Rendu et routage ================= */
