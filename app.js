@@ -9,7 +9,6 @@ const RULES = {
   seance: 50,          // XP par séance terminée
   semaine4: 10,        // bonus si 4 séances dans la semaine (lundi→dimanche)
   record: 25,          // bonus par nouveau record de charge (provisoire)
-  progression: 2.5,    // kg proposés en plus si toutes les séries sont réussies
   etapeCours: 20,      // XP par étape de cours (provisoire)
   pomo: 10,            // XP par bloc de 25 min de révision
   examen: 200,         // bonus par examen réussi
@@ -93,6 +92,13 @@ let S;
 function load(){
   try { S = Object.assign(blank(), JSON.parse(localStorage.getItem(KEY) || '{}')); }
   catch { S = blank(); }
+}
+function migrate(){
+  // v0.6 : plus d'augmentation automatique. Les charges prévues redeviennent la dernière charge réellement saisie.
+  if (S.mig06) return;
+  for (const id in EXN){ const last = lastOf(id); if (last) S.loads[id] = last.kg; }
+  if (S.cur && !Object.values(S.cur.ex).some(e => e.sets.some(x => x))) for (const id in S.cur.ex) S.cur.ex[id].kg = S.loads[id] ?? null;
+  S.mig06 = true; save();
 }
 function save(){ localStorage.setItem(KEY, JSON.stringify(S)); }
 
@@ -339,7 +345,7 @@ function finishSession(){
   S.workouts.push(w);
   for (const id in ex){
     const def = EXN[id];
-    S.loads[id] = (def[4] !== 'sec' && allSuccess(ex[id])) ? ex[id].kg + RULES.progression : ex[id].kg;
+    S.loads[id] = ex[id].kg;   // la prochaine séance reprend la dernière charge saisie
   }
   S.rest = S.rest.filter(d => d !== c.date);
   S.cur = null;
@@ -448,8 +454,7 @@ function viewForce(snap){
       const e = c.ex ? c.ex[id] : {kg: S.loads[id] ?? null, sets: Array(n).fill(0)};
       const last = lastOf(id);
       let hint = '';
-      if (last && kind !== 'sec' && allSuccess(last)) hint = `<span class="hint">↑ +${kgTxt(RULES.progression)} kg : tout réussi la dernière fois (${kgTxt(last.kg)} kg)</span>`;
-      else if (last && kind !== 'sec') hint = `<span class="muted small">Dernière fois : ${kgTxt(last.kg)} kg, on garde</span>`;
+      if (last && kind !== 'sec') hint = `<span class="muted small">Dernière fois : ${kgTxt(last.kg)} kg${allSuccess(last) ? ', tout réussi' : ', pas tout réussi'}</span>`;
       else if (kind !== 'sec' && e.kg == null) hint = `<span class="muted small">Première fois : note la charge utilisée</span>`;
       const unit = kind === 'sec' ? `${reps} s` : `× ${reps}`;
       const kgIn = kind === 'sec' ? '' : `<input class="kg" type="number" inputmode="decimal" step="0.5" min="0" placeholder="${kind==='lest'?'lest':'kg'}" value="${e.kg ?? ''}" data-in="kg" data-id="${id}"><span class="muted">kg</span>`;
@@ -464,7 +469,7 @@ function viewForce(snap){
      <div class="seg">${types}</div>
      <div class="win flat">
       <div class="row">${check(c.run[0],'run','data-i="0"')}<span class="grow">10 min de course (échauffement)</span></div>
-      <div class="muted small">« Valider » = toutes les séries réussies (+${kgTxt(RULES.progression)} kg proposés la prochaine fois). « Raté » = fait, mais pas toutes les reps : on garde la charge.</div>
+      <div class="muted small">La charge reprend ta dernière saisie : change-la si tu veux augmenter. « Valider » = toutes les séries réussies. « Raté » = fait, mais pas toutes les reps (ne compte pas pour un record).</div>
       ${exs}
       <div class="row">${check(c.run[1],'run','data-i="1"')}<span class="grow">10 min de course (retour au calme)</span></div>
       <button class="btn pri" data-act="finish">Terminer la séance · +${RULES.seance} XP</button>
@@ -594,13 +599,13 @@ function viewReglages(){
    <div class="win flat col"><div class="qt">Nom du personnage</div><input value="${esc(S.name)}" data-in="name"></div>
    <div class="win flat col"><div class="qt">Règles actuelles</div><div class="muted small">
      Niveau n d'une stat : 100 × n XP. Niveau perso : somme des 5 niveaux ÷ 5.<br>
-     Force : ${RULES.seance} XP/séance, +${RULES.semaine4} à la 4e séance de la semaine, +${RULES.record} par record (charge plus lourde avec toutes les séries réussies).<br>
+     Force : ${RULES.seance} XP/séance (charges gérées par toi, préremplies avec la dernière saisie), +${RULES.semaine4} à la 4e séance de la semaine, +${RULES.record} par record (charge plus lourde avec toutes les séries réussies).<br>
      Savoir : ${RULES.pomo} XP par 25 min de révision, ${RULES.etapeCours} XP par étape de cours (lu, appris, quiz, maîtrisé), +${RULES.examen} par examen. Sagesse : ${RULES.page} XP/page, +${RULES.livre} par livre.<br>
      Stratégie : ${RULES.puzzles} XP par série de 10 puzzles. Vitalité : ${RULES.kcal} XP si ${RULES.kcalSeuil} kcal.<br>
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v0.5</div>`;
+   <div class="muted small center">Life RPG · prototype v0.6</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -746,7 +751,7 @@ document.addEventListener('change', e => {
   else if (k === 'name'){ S.name = el.value.trim() || 'Boss'; }
   else if (k === 'import'){
     const f = el.files[0]; if (!f) return;
-    f.text().then(txt => { try { const d = JSON.parse(txt); if (!d || d.v !== 1) throw 0; S = Object.assign(blank(), d); lastLevels = null; commit(); toast('Sauvegarde importée'); } catch { toast('Fichier invalide'); } });
+    f.text().then(txt => { try { const d = JSON.parse(txt); if (!d || d.v !== 1) throw 0; S = Object.assign(blank(), d); S.mig06 = false; migrate(); lastLevels = null; commit(); toast('Sauvegarde importée'); } catch { toast('Fichier invalide'); } });
     return;
   }
   else return;   // champs de saisie libre (nom de cours…) : lus au clic sur le bouton
@@ -761,5 +766,5 @@ window.addEventListener('hashchange', () => { window.scrollTo(0,0); render(); })
 // Repasser sur l'appli le lendemain : rafraîchir la date
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
 
-load(); render();
+load(); migrate(); render();
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js', {updateViaCache:'none'});
