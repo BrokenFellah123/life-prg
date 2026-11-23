@@ -1,0 +1,85 @@
+/* Life RPG — sons générés en Web Audio (aucun fichier).
+   SOUNDS[thème][action][version] = fonction qui joue le son. */
+'use strict';
+let AC = null;
+function ac(){
+  if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
+  if (AC.state === 'suspended') AC.resume();
+  return AC;
+}
+// Note simple avec enveloppe
+function tone({f = 440, f2 = null, type = 'sine', t = 0, d = 0.1, v = 0.2, a = 0.005}){
+  const c = ac(), o = c.createOscillator(), g = c.createGain(), s = c.currentTime + t;
+  o.type = type; o.frequency.setValueAtTime(f, s);
+  if (f2) o.frequency.exponentialRampToValueAtTime(f2, s + d);
+  g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(v, s + a); g.gain.exponentialRampToValueAtTime(0.0001, s + d);
+  o.connect(g).connect(c.destination); o.start(s); o.stop(s + d + 0.02);
+}
+// Bruit filtré (bois, clics, glissements)
+function noise({t = 0, d = 0.05, v = 0.3, ft = 'bandpass', f = 1000, f2 = null, q = 1}){
+  const c = ac(), len = Math.ceil(c.sampleRate * (d + 0.02)), buf = c.createBuffer(1, len, c.sampleRate), ch = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) ch[i] = Math.random() * 2 - 1;
+  const src = c.createBufferSource(), fl = c.createBiquadFilter(), g = c.createGain(), s = c.currentTime + t;
+  src.buffer = buf; fl.type = ft; fl.frequency.setValueAtTime(f, s); fl.Q.value = q;
+  if (f2) fl.frequency.exponentialRampToValueAtTime(f2, s + d);
+  g.gain.setValueAtTime(v, s); g.gain.exponentialRampToValueAtTime(0.0001, s + d);
+  src.connect(fl).connect(g).connect(c.destination); src.start(s); src.stop(s + d + 0.02);
+}
+const bell = (f, t = 0, d = 1.2, v = 0.12) => { [1, 2.01, 3.02].forEach((m, i) => tone({f: f*m, t, d: d/(i+1), v: v/(i+1), a: 0.003})); };
+
+const SOUNDS = {
+  pixel: {
+    quete: {
+      A: () => { tone({f:988, type:'square', d:0.07, v:0.12}); tone({f:1319, type:'square', t:0.07, d:0.3, v:0.12}); },
+      B: () => [523, 659, 784, 1047].forEach((f, i) => tone({f, type:'square', t:i*0.05, d:0.09, v:0.1})),
+    },
+    onglet: {
+      A: () => tone({f:1800, type:'square', d:0.025, v:0.08}),
+      B: () => tone({f:660, f2:990, type:'triangle', d:0.05, v:0.18}),
+    },
+    attribut: {
+      A: () => tone({f:880, f2:440, type:'square', d:0.08, v:0.1}),
+      B: () => { tone({f:523, type:'square', d:0.05, v:0.1}); tone({f:784, type:'square', t:0.05, d:0.07, v:0.1}); },
+    },
+    niveau: {
+      A: () => { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone({f, type:'square', t:i*0.09, d:0.1, v:0.1})); tone({f:1319, type:'square', t:0.56, d:0.5, v:0.11}); },
+      B: () => { tone({f:200, f2:1600, type:'square', d:0.35, v:0.08}); [2093, 2637, 3136].forEach((f, i) => tone({f, type:'triangle', t:0.38 + i*0.07, d:0.25, v:0.1})); },
+    },
+  },
+  chess: {
+    quete: {
+      A: () => { noise({f:900, q:2, d:0.06, v:0.6}); tone({f:180, f2:120, d:0.09, v:0.35}); },
+      B: () => { noise({f:900, q:2, d:0.05, v:0.5}); tone({f:170, f2:120, d:0.08, v:0.3}); noise({t:0.16, ft:'highpass', f:3500, d:0.02, v:0.5}); },
+    },
+    onglet: {
+      A: () => noise({ft:'highpass', f:3000, d:0.015, v:0.45}),
+      B: () => noise({f:1500, q:3, d:0.03, v:0.5}),
+    },
+    attribut: {
+      A: () => noise({ft:'lowpass', f:600, f2:2400, d:0.16, v:0.35}),
+      B: () => { tone({f:300, f2:200, d:0.06, v:0.3}); noise({f:1200, q:2, d:0.03, v:0.3}); },
+    },
+    niveau: {
+      A: () => { [0, 0.14, 0.28].forEach((t, i) => { noise({t, f:800 + i*300, q:2, d:0.05, v:0.5}); tone({t, f:160 + i*30, d:0.08, v:0.3}); }); bell(784, 0.45); },
+      B: () => { bell(659, 0, 1.4, 0.13); bell(988, 0.25, 1.4, 0.1); },
+    },
+  },
+  clinic: {
+    quete: {
+      A: () => tone({f:1000, d:0.14, v:0.22}),
+      B: () => { tone({f:880, d:0.08, v:0.2}); tone({f:1320, t:0.09, d:0.14, v:0.2}); },
+    },
+    onglet: {
+      A: () => tone({f:440, d:0.04, v:0.18}),
+      B: () => tone({f:620, type:'triangle', d:0.03, v:0.22}),
+    },
+    attribut: {
+      A: () => { tone({f:1000, d:0.05, v:0.18}); tone({f:1000, t:0.09, d:0.05, v:0.18}); },
+      B: () => { tone({f:800, d:0.05, v:0.18}); tone({f:1200, t:0.08, d:0.06, v:0.18}); },
+    },
+    niveau: {
+      A: () => [880, 1100, 1320].forEach((f, i) => tone({f, t:i*0.16, d:i === 2 ? 0.4 : 0.1, v:0.2})),
+      B: () => [523, 659, 784].forEach(f => tone({f, d:1.1, v:0.1, a:0.06})),
+    },
+  },
+};
