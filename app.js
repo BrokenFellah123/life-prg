@@ -15,7 +15,7 @@ const RULES = {
   page: 1,             // XP par page lue
   livre: 100,          // bonus par livre fini
   puzzles: 5,          // XP par série de 10 puzzles (à affiner)
-  kcalSeuil: 3000,
+  kcalSeuil: 3500,
   kcal: 40,            // XP si le seuil de kcal est atteint
   absenceRetour: 3,    // jours d'absence avant la quête « Retour » (XP du jour ×2)
   objectifPages: 10,
@@ -27,7 +27,7 @@ const STATS = [
   {k:'sav', name:'Savoir',    abbr:'SAV', page:'savoir',    sub:'Médecine'},
   {k:'sag', name:'Sagesse',   abbr:'SAG', page:'sagesse',   sub:'Lecture'},
   {k:'str', name:'Stratégie', abbr:'STR', page:'strategie', sub:'Échecs rapide'},
-  {k:'vit', name:'Vitalité',  abbr:'VIT', page:'vitalite',  sub:'Alimentation'},
+  {k:'vit', name:'Ravitaillement', abbr:'RAV', page:'vitalite',  sub:'Alimentation'},
 ];
 const STAGES = ['Novice','Apprenti','Athlète','Guerrier','Champion','Titan'];
 const STAGE_LVL = [0, 2, 5, 10, 15, 20];   // niveau de Force requis pour chaque stade
@@ -103,6 +103,7 @@ function migrate(){
 function save(){ localStorage.setItem(KEY, JSON.stringify(S)); }
 
 /* ================= Moteur d'XP ================= */
+function kcalXP(k){ return Math.min(4, Math.floor((k || 0) / RULES.kcalSeuil * 4)) * (RULES.kcal / 4); }
 function levelOf(xp){
   // Passer du niveau n-1 au niveau n coûte 100×n XP (niveau 1 = 100 XP, niveau 2 = +200…)
   let lvl = 0, rest = xp;
@@ -143,8 +144,8 @@ function computeEvents(){
   for (const b of S.books) if (b.done) push(b.done, 'sag', RULES.livre, `Livre fini : ${b.title}`);
   // Stratégie
   for (const p of S.puzzles) push(p.date, 'str', RULES.puzzles, '10 puzzles');
-  // Vitalité
-  for (const d in S.kcal) if (S.kcal[d] >= RULES.kcalSeuil) push(d, 'vit', RULES.kcal, `${S.kcal[d]} kcal`);
+  // Ravitaillement : paliers de 25 % de l'objectif = 10, 20, 30, 40 XP (le plus haut palier atteint)
+  for (const d in S.kcal) { const x = kcalXP(S.kcal[d]); if (x) push(d, 'vit', x, `${S.kcal[d]} kcal (${Math.min(100, Math.floor(S.kcal[d]/RULES.kcalSeuil*4)*25)} %)`); }
 
   // Quête « Retour » : après 3 jours sans aucune action, l'XP du premier jour de reprise est doublée.
   const days = [...activeDays()].sort();
@@ -390,7 +391,7 @@ function viewJour(snap){
   const qPuz = q('str', puzT >= 1, '10 puzzles d\'échecs', `${puzT*10} puzzles aujourd'hui`, `+${RULES.puzzles}`,
      `<div class="row wrap"><button class="btn sm" data-act="puz">+ 1 série de 10</button>${puzT ? `<button class="btn sm ghost" data-act="unpuz">− annuler</button>` : ''}</div>`);
 
-  const qKcal = q('vit', kc >= RULES.kcalSeuil, `${RULES.kcalSeuil} kcal`, kc ? `${kc} kcal saisies` : 'Saisis ton total du jour', `+${RULES.kcal}`,
+  const qKcal = q('vit', kc >= RULES.kcalSeuil, `${RULES.kcalSeuil} kcal`, kc ? `${kc} kcal saisies · +${kcalXP(kc)} XP (palier tous les ${RULES.kcalSeuil/4} kcal)` : `Saisis ton total du jour · +10 XP tous les ${RULES.kcalSeuil/4} kcal`, `+${RULES.kcal}`,
      `<div class="row"><input class="mid" type="number" inputmode="numeric" min="0" step="50" placeholder="total" value="${kc}" data-in="kcal"><span class="muted">kcal</span></div>`);
 
   return `<div class="row"><div class="grow"><div class="ttl big">Quêtes du jour</div><div class="muted">${longDate(t)}</div></div>
@@ -576,9 +577,9 @@ function viewVitalite(snap){
   return `${statHead('vit', snap)}
    <div class="win"><div class="qt">Total du jour</div>
      <div class="row"><input class="mid" type="number" inputmode="numeric" min="0" step="50" placeholder="kcal" value="${kc}" data-in="kcal"><span class="muted">kcal · objectif ${RULES.kcalSeuil}</span></div>
-     ${bar((kc||0)/RULES.kcalSeuil, 'vit')}</div>
+     ${bar((kc||0)/RULES.kcalSeuil, 'vit')}<div class="muted small">Paliers : ${[1,2,3,4].map(i => `${RULES.kcalSeuil*i/4} kcal = ${i*10} XP`).join(' · ')}. Aujourd'hui : +${kcalXP(kc)} XP.</div></div>
    <div class="sec">7 derniers jours</div>
-   <div class="win flat log">${days.map(d => { const v = S.kcal[d]; return `<div><span class="d">${shortDate(d)}</span><span class="grow">${v ? v+' kcal' : '<span class="muted">—</span>'}</span><span class="xp">${v >= RULES.kcalSeuil ? '+'+RULES.kcal : ''}</span></div>`; }).join('')}</div>
+   <div class="win flat log">${days.map(d => { const v = S.kcal[d]; return `<div><span class="d">${shortDate(d)}</span><span class="grow">${v ? v+' kcal' : '<span class="muted">—</span>'}</span><span class="xp">${kcalXP(v) ? '+'+kcalXP(v) : ''}</span></div>`; }).join('')}</div>
    <div class="muted small">Oublié de saisir hier ? Ouvre « Sauvegarde et réglages » : la saisie d'un jour passé y est possible.</div>`;
 }
 
@@ -601,11 +602,11 @@ function viewReglages(){
      Niveau n d'une stat : 100 × n XP. Niveau perso : somme des 5 niveaux ÷ 5.<br>
      Force : ${RULES.seance} XP/séance (charges gérées par toi, préremplies avec la dernière saisie), +${RULES.semaine4} à la 4e séance de la semaine, +${RULES.record} par record (charge plus lourde avec toutes les séries réussies).<br>
      Savoir : ${RULES.pomo} XP par 25 min de révision, ${RULES.etapeCours} XP par étape de cours (lu, appris, quiz, maîtrisé), +${RULES.examen} par examen. Sagesse : ${RULES.page} XP/page, +${RULES.livre} par livre.<br>
-     Stratégie : ${RULES.puzzles} XP par série de 10 puzzles. Vitalité : ${RULES.kcal} XP si ${RULES.kcalSeuil} kcal.<br>
+     Stratégie : ${RULES.puzzles} XP par série de 10 puzzles. Ravitaillement : 10 XP par quart de l'objectif de ${RULES.kcalSeuil} kcal (max ${RULES.kcal} XP).<br>
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v0.6.1</div>`;
+   <div class="muted small center">Life RPG · prototype v0.7</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -744,7 +745,7 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const el = e.target, k = el.dataset.in; if (!k) return; const before = snapshot();
   const num = parseFloat(String(el.value).replace(',', '.'));
-  if (k === 'kcal' || k === 'kcalY'){ const d = k === 'kcal' ? today() : addDays(today(), -1); if (num > 0) S.kcal[d] = Math.round(num); else delete S.kcal[d]; if (num >= RULES.kcalSeuil && k === 'kcal') toast(`+${RULES.kcal} XP Vitalité`); }
+  if (k === 'kcal' || k === 'kcalY'){ const d = k === 'kcal' ? today() : addDays(today(), -1); if (num > 0) S.kcal[d] = Math.round(num); else delete S.kcal[d]; if (k === 'kcal' && kcalXP(num)) toast(`${kcalXP(num)} XP Ravitaillement aujourd'hui`); }
   else if (k === 'kg'){ const c = ensureCur(); c.ex[el.dataset.id].kg = isNaN(num) ? null : num; }
   else if (k === 'load'){ if (isNaN(num)) delete S.loads[el.dataset.id]; else S.loads[el.dataset.id] = num;
     if (S.cur && S.cur.ex[el.dataset.id] && !S.cur.ex[el.dataset.id].sets.some(x => x)) S.cur.ex[el.dataset.id].kg = isNaN(num) ? null : num; }
