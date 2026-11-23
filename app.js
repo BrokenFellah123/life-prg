@@ -81,6 +81,7 @@ const blank = () => ({
   pomo:{},          // date → nombre de blocs de 25 min
   outfit:{},
   theme:'pixel',
+  sound:true,
   tquests:[],       // quêtes du lendemain {id,date,stat,text,done}
   books:[],         // {id,title,total,done}
   pages:[],         // {id,date,book,n}
@@ -414,7 +415,7 @@ function viewFiche(snap){
   const rows = STATS.map(s => {
     const l = snap.lv[s.k];
     const eloV = s.k === 'str' && S.elo.length ? ` · Elo ${S.elo[S.elo.length-1].v}` : '';
-    return `<a href="#${s.page}" class="row" style="color:inherit;text-decoration:none;padding:6px 0">${ico(s.k)}
+    return `<a href="#${s.page}" class="row stat-link" style="color:inherit;text-decoration:none;padding:6px 0">${ico(s.k)}
       <div class="grow col" style="gap:4px"><div class="row"><span class="grow name" style="font-weight:500">${s.name}</span><span class="num" style="color:var(--${s.k});font-size:19px">${l.xp} XP</span><span class="ttl" style="color:var(--${s.k})">NIV ${l.lvl}</span></div>
       ${bar(l.into/l.cost, s.k)}<div class="row muted small"><span class="grow">${s.sub}${eloV}</span><span class="num" style="font-size:17px">niv. ${l.lvl+1} : ${l.into}/${l.cost}</span></div></div></a>`;
   }).join('');
@@ -579,6 +580,8 @@ function viewVitalite(snap){
 function viewReglages(){
   const y = addDays(today(), -1);
   return `<a class="back" href="#fiche">‹ Fiche</a><div class="ttl big">Sauvegarde et réglages</div>
+   <div class="win flat row"><div class="grow"><div class="qt">Sons</div><div class="muted small">Coupés aussi quand l'iPhone est en silencieux.</div></div>
+     <button class="btn sm ${S.sound === false ? '' : 'pri'}" data-act="sound">${S.sound === false ? 'Coupés' : 'Activés'}</button></div>
    <div class="win flat col"><div class="qt">Thème</div><div class="themes">${THEMES.map(t => `<button class="theme-opt ${theme()===t.k?'on':''}" data-act="theme" data-t="${t.k}"><span class="sw3">${t.sw.map(c => `<i style="background:${c}"></i>`).join('')}</span>${t.name}</button>`).join('')}</div>
      <div class="muted small">L'avatar reste en pixel art dans tous les thèmes.</div></div>
    <div class="win flat col"><div class="qt">Sauvegarde</div>
@@ -597,7 +600,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v0.4.1</div>`;
+   <div class="muted small center">Life RPG · prototype v0.5</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -626,6 +629,26 @@ function render(){
   lastLevels = Object.fromEntries(STATS.map(s => [s.k, snap.lv[s.k].lvl])); lastLevels.perso = snap.perso;
 }
 function commit(){ save(); render.keepScroll = true; render(); }
+/* ---- Sons choisis (voir sons.js) ---- */
+const SOUND_PICK = {
+  pixel:  {quete:'A', onglet:'B', attribut:'B', niveau:'B'},
+  chess:  {quete:'A', onglet:'B', attribut:'A', niveau:'B'},
+  clinic: {quete:'A', onglet:'A', attribut:'B', niveau:'B'}};
+function play(action){
+  if (S.sound === false || typeof SOUNDS === 'undefined') return;
+  try { const t = theme(); SOUNDS[t][action][SOUND_PICK[t][action]](); } catch {}
+}
+// Après une action : son de niveau si une stat ou le perso monte, sinon son de quête si de l'XP a été gagnée
+function feedback(before){
+  const after = snapshot();
+  const up = after.perso > before.perso || STATS.some(s => after.lv[s.k].lvl > before.lv[s.k].lvl);
+  const gained = Object.keys(after.tot).some(k => after.tot[k] > before.tot[k]);
+  if (up) play('niveau'); else if (gained) play('quete');
+}
+document.addEventListener('click', e => {
+  if (e.target.closest('nav.tabs a')) play('onglet');
+  else if (e.target.closest('a.stat-link')) play('attribut');
+}, true);
 let toastT;
 function toast(msg, cls='', ms=2200){
   document.querySelector('.toast')?.remove(); clearTimeout(toastT);
@@ -646,6 +669,7 @@ const ACTS = {
   tqDel(el){ const q = S.tquests.find(x => x.id === el.dataset.id); S.tquests = S.tquests.filter(x => x !== q); setTimeout(() => { const i = document.querySelector('[data-in=tqtext]'); if (i && q) { i.value = q.text; document.querySelector('[data-in=tqstat]').value = q.stat; } }, 0); },
   tqDone(el){ const q = S.tquests.find(x => x.id === el.dataset.id); q.done = q.done ? null : today(); if (q.done) toast(`Quête réussie ! +${RULES.queteDemain} XP`); },
   theme(el){ S.theme = el.dataset.t; },
+  sound(){ S.sound = S.sound === false; if (S.sound) setTimeout(() => play('quete'), 50); },
   outfit(el){ S.outfit = Object.assign({}, S.outfit, {[el.dataset.part]: el.dataset.v}); },
   pages(el){
     const id = el.dataset.id || (S.books.find(b => !b.done) || {}).id; if (!id) return;
@@ -710,10 +734,10 @@ const ACTS = {
 };
 document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]'); if (!el || el.disabled) return;
-  e.preventDefault(); ACTS[el.dataset.act]?.(el); commit();
+  e.preventDefault(); const before = snapshot(); ACTS[el.dataset.act]?.(el); commit(); feedback(before);
 });
 document.addEventListener('change', e => {
-  const el = e.target, k = el.dataset.in; if (!k) return;
+  const el = e.target, k = el.dataset.in; if (!k) return; const before = snapshot();
   const num = parseFloat(String(el.value).replace(',', '.'));
   if (k === 'kcal' || k === 'kcalY'){ const d = k === 'kcal' ? today() : addDays(today(), -1); if (num > 0) S.kcal[d] = Math.round(num); else delete S.kcal[d]; if (num >= RULES.kcalSeuil && k === 'kcal') toast(`+${RULES.kcal} XP Vitalité`); }
   else if (k === 'kg'){ const c = ensureCur(); c.ex[el.dataset.id].kg = isNaN(num) ? null : num; }
@@ -726,7 +750,7 @@ document.addEventListener('change', e => {
     return;
   }
   else return;   // champs de saisie libre (nom de cours…) : lus au clic sur le bouton
-  commit();
+  commit(); feedback(before);
 });
 // Entrée dans un champ « OK » déclenche le bouton voisin
 document.addEventListener('keydown', e => {
