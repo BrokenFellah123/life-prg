@@ -132,4 +132,12 @@ select.sel{flex:1;background:var(--track);border:2px solid var(--line);border-ra
 
 #hero.hop{animation:hop .9s steps(6) 1}
 @keyframes hop{0%,100%{transform:translateY(0)}25%{transform:translateY(-4px)}50%{transform:translateY(0)}70%{transform:translateY(-2px)}}
-@media (prefers-reduced-motion:reduce){#hero.hop{animation:none}}
+#hero.hop-big{animation:hopbig .9s steps(6) 1}
+@keyframes hopbig{0%,100%{transform:translateY(0)}25%{transform:translateY(-7px)}50%{transform:translateY(0)}70%{transform:translateY(-4px)}}
+#hero.hop-soft{animation:hopsoft .9s steps(4) 1}
+@keyframes hopsoft{0%,100%{transform:translateY(0)}50%{transform:translateY(1px)}}
+.spk{opacity:0;animation:spk 4s steps(1) infinite}
+@keyframes spk{0%{opacity:0}8%{opacity:1}16%{opacity:.4}24%,100%{opacity:0}}
+.btn.grade{min-width:56px}
+.emo{font-family:system-ui,sans-serif;font-size:1.5em;line-height:1;vertical-align:middle}
+@media (prefers-reduced-motion:reduce){#hero.hop,#hero.hop-big,#hero.hop-soft{animation:none}.spk{animation:none;opacity:1}}

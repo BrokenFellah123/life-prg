@@ -87,6 +87,7 @@ const blank = () => ({
   puzzles:[],       // {id,date}
   elo:[],           // {date,v}
   kcal:{},          // date → total
+  grade:{},         // date → note de qualité C / B / A / S
 });
 let S;
 function load(){
@@ -103,7 +104,25 @@ function migrate(){
 function save(){ localStorage.setItem(KEY, JSON.stringify(S)); }
 
 /* ================= Moteur d'XP ================= */
-function kcalXP(k){ const q = Math.min(4, Math.floor((k || 0) / RULES.kcalSeuil * 4)); return q >= 2 ? q * (RULES.kcal / 4) : 0; }   // paliers 50 / 75 / 100 %
+// Ravitaillement : plus d'XP. Rang = moyenne des notes C/B/A/S des 30 derniers jours (jours sans note ignorés).
+// Le rang ne compte pas dans le niveau perso : il change l'allure de l'avatar.
+const GRADES = ['C','B','A','S'];
+const GVAL = {C:1, B:2, A:3, S:4};
+const GEMO = {C:'🍔', B:'🍝', A:'🍗', S:'🥩'};
+const last30 = obj => { const t = today(), from = addDays(t, -29); return Object.keys(obj || {}).filter(d => d >= from && d <= t); };
+function tierOf(){
+  const ds = last30(S.grade).filter(d => GVAL[S.grade[d]]);
+  if (!ds.length) return null;
+  const avg = ds.reduce((a,d) => a + GVAL[S.grade[d]], 0) / ds.length;
+  const letter = GRADES[Math.min(4, Math.max(1, Math.round(avg))) - 1];   // lettre la plus proche (2,5 → A)
+  return {letter, val: GVAL[letter], avg, n: ds.length};
+}
+function kcalAvg(){
+  const ds = last30(S.kcal).filter(d => S.kcal[d] > 0);
+  return ds.length ? {avg: Math.round(ds.reduce((a,d) => a + S.kcal[d], 0) / ds.length), n: ds.length} : null;
+}
+const tierTxt = t => t ? `${t.letter}-tier <span class="emo">${GEMO[t.letter]}</span>` : 'sans tier';
+const emo = g => `<span class="emo">${GEMO[g]}</span>`;
 function levelOf(xp){
   // Passer du niveau n-1 au niveau n coûte 100×n XP (niveau 1 = 100 XP, niveau 2 = +200…)
   let lvl = 0, rest = xp;
@@ -144,8 +163,6 @@ function computeEvents(){
   for (const b of S.books) if (b.done) push(b.done, 'sag', RULES.livre, `Livre fini : ${b.title}`);
   // Stratégie
   for (const p of S.puzzles) push(p.date, 'str', RULES.puzzles, '10 puzzles');
-  // Ravitaillement : 50 % de l'objectif = 20 XP, 75 % = 30, 100 % = 40 (le plus haut palier atteint)
-  for (const d in S.kcal) { const x = kcalXP(S.kcal[d]); if (x) push(d, 'vit', x, `${S.kcal[d]} kcal (${Math.min(100, Math.floor(S.kcal[d]/RULES.kcalSeuil*4)*25)} %)`); }
 
   // Quête « Retour » : après 3 jours sans aucune action, l'XP du premier jour de reprise est doublée.
   const days = [...activeDays()].sort();
@@ -155,7 +172,7 @@ function computeEvents(){
       for (const e of ev.filter(e => e.date === d)) push(d, e.stat, e.xp, `Retour ×2 · ${e.label}`);
     }
   }
-  return ev;
+  return ev.filter(e => e.stat !== 'vit');   // Ravitaillement ne gagne plus d'XP (ancienne quête du lendemain comprise)
 }
 function activeDays(){
   const s = new Set();
@@ -166,6 +183,7 @@ function activeDays(){
   (S.tquests || []).forEach(q => q.done && s.add(q.done));
   S.puzzles.forEach(p => s.add(p.date)); S.elo.forEach(e => s.add(e.date));
   Object.keys(S.kcal).forEach(d => S.kcal[d] > 0 && s.add(d));
+  Object.keys(S.grade || {}).forEach(d => s.add(d));
   Object.keys(S.pomo).forEach(d => S.pomo[d] > 0 && s.add(d));
   return s;
 }
@@ -179,9 +197,11 @@ function snapshot(){
   const tot = {for:0,sav:0,sag:0,str:0,vit:0};
   ev.forEach(e => tot[e.stat] += e.xp);
   const lv = {}; for (const k in tot) lv[k] = levelOf(tot[k]);
-  const sum = Object.values(lv).reduce((a,b) => a + b.lvl, 0);
+  const sum = ['for','sav','sag','str'].reduce((a,k) => a + lv[k].lvl, 0);   // niveau perso : 4 attributs ÷ 4
+  lv.vit = {lvl:0, into:0, cost:1, xp:0};
+  const tier = tierOf();
   const t = today();
-  return {ev, tot, lv, perso: Math.floor(sum/5), sum, todayXP: ev.filter(e => e.date === t).reduce((a,e) => a + e.xp, 0)};
+  return {ev, tot, lv, tier, perso: Math.floor(sum/4), sum, todayXP: ev.filter(e => e.date === t).reduce((a,e) => a + e.xp, 0)};
 }
 function stageOf(forLvl){ let s = 0; STAGE_LVL.forEach((l,i) => { if (forLvl >= l) s = i; }); return s; }
 
@@ -214,7 +234,8 @@ const unlocked = it => !it.lvl || persoLvl >= it.lvl;
 const wItem = (part, v) => { const it = WARDROBE[part].find(x => x.v === v); return it && unlocked(it) ? it : WARDROBE[part].find(x => x.v === OUTFIT0[part]); };
 const shade = (hex, f=.75) => '#' + [1,3,5].map(i => Math.round(parseInt(hex.slice(i,i+2),16)*f).toString(16).padStart(2,'0')).join('');
 
-function avatarSVG(stage, px, outfit = S.outfit || {}, pose = ''){
+const curTier = () => (tierOf() || {letter:'B'}).letter;   // sans note = allure B
+function avatarSVG(stage, px, outfit = S.outfit || {}, pose = '', tier = curTier()){
   const o = Object.assign({}, OUTFIT0, outfit);
   const it = {}; for (const k in OUTFIT0) it[k] = wItem(k, o[k]);
   const W = 32, H = 36, g = Array.from({length:H}, () => Array(W).fill(0));
@@ -227,10 +248,20 @@ function avatarSVG(stage, px, outfit = S.outfit || {}, pose = ''){
   if (it.back.v === 'cape') for (let y = 10; y <= 31; y++) sym(y, sh + 1 + Math.floor((y-10)/5), 29);   // cape (derrière le corps)
   for (let y = 2; y <= 8; y++) sym(y, y===2||y===8 ? 2 : 3, 1);   // tête
   sym(2, 3, 2); sym(3, 3, 2); span(4, 12, 12, 2); span(4, 19, 19, 2);
-  g[5][14] = 2; g[5][17] = 2;
-  if (pose === 'wink'){ g[5][14] = 1; span(5, 13, 14, 2); }   // clin d'œil
+  // visage selon le tier : 34 bouche, 35 dents, 36 cernes
+  const tired = tier === 'C';
+  if (pose === 'yawn'){ span(5, 13, 14, 36); span(5, 17, 18, 36); span(6, 15, 16, 34); span(7, 15, 16, 34); }   // C : bâillement
+  else {
+    if (tired){ span(4, 13, 14, 36); span(4, 17, 18, 36); g[5][14] = 2; g[5][17] = 2; g[6][14] = 36; g[6][17] = 36; }   // paupières lourdes, cernes
+    else { g[5][14] = 2; g[5][17] = 2; }
+    if (pose === 'wink'){ g[5][14] = 1; g[5][13] = 1; span(5, 13, 14, 2); if (!tired) g[5][17] = 2; }   // clin d'œil
+    if (tier === 'S'){ g[6][14] = 34; g[6][17] = 34; span(7, 14, 17, 34); span(7, 15, 16, 35); }   // grand sourire
+    else if (tier === 'A'){ g[6][14] = 34; g[6][17] = 34; span(7, 15, 16, 34); }               // sourire
+    else span(7, 15, 16, 34);                                                                    // neutre (B, C)
+  }
   sym(9, 1 + (s >= 4 ? 1 : 0), 1);
-  for (let y = 10; y <= 19; y++){ const t = (y-10)/9; sym(y, Math.round(sh + (wa - sh)*t*t), 6); }
+  for (let y = 10; y <= 19; y++){ const t = (y-10)/9; sym(y, Math.round(sh + (wa - sh)*t*t) + (tier === 'S' && y >= 11 && y <= 13 ? 1 : 0), 6); }   // S : torse bombé
+  if (tier === 'C'){ g[10][16-sh] = 0; g[10][15+sh] = 0; }   // C : épaules tombantes
   for (let y = 11; y <= 21; y++){
     const off = y > 16 ? 1 : 0, c = y <= 14 ? 7 : y === 21 ? 12 : 8;
     if (pose !== 'flex') span(y, ax0 - off, ax0 + aw - 1 - off, c);
@@ -272,6 +303,10 @@ function avatarSVG(stage, px, outfit = S.outfit || {}, pose = ''){
   if (it.head.v === 'band'){ sym(3, 4, 21); g[3][15] = 24; g[3][16] = 24; }
   if (it.head.v === 'hat'){ sym(0, 2, 22); sym(1, 3, 22); sym(2, 3, 30); span(3, 10, 21, 22); }
   if (it.head.v === 'crown'){ span(0, 13, 13, 23); span(0, 18, 18, 23); span(0, 15, 16, 23); span(1, 13, 18, 23); sym(2, 3, 23); g[2][15] = 24; g[2][16] = 24; g[2][13] = 31; g[2][18] = 31; }
+  if (tired){   // C : tête baissée d'un pixel
+    const isHead = c => c === 1 || c === 2 || c === 34 || c === 36 || (c >= 20 && c !== 26 && c !== 27 && c !== 28 && c !== 29);
+    for (let y = 9; y >= 0; y--) for (let x = 8; x <= 23; x++) if (isHead(g[y][x])) { g[y+1][x] = g[y][x]; g[y][x] = 0; }
+  }
   const out = g.map(r => r.slice());
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++){
     if (g[y][x]) continue;
@@ -284,8 +319,13 @@ function avatarSVG(stage, px, outfit = S.outfit || {}, pose = ''){
   if (isTee || isLong){ COL[6] = COL[7] = top.c; COL[4] = shade(top.c, .85); }
   if (isLong) COL[8] = top.c;
   if (bot.v.startsWith('pant') || bot.v === 'stripe'){ COL[10] = bot.c; COL[11] = shade(bot.c); }
+  COL[34] = '#7a2b2b'; COL[35] = '#f5f1e6'; COL[36] = '#b98a7a';
   let r = '';
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (out[y][x]) r += `<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="${COL[out[y][x]]}"/>`;
+  if (tier === 'S'){   // S : éclats qui brillent de temps en temps
+    const spk = (x, y, d) => `<g class="spk" style="animation-delay:${d}s"><rect x="${x}" y="${y-1}" width="1" height="3" fill="#ffd23f"/><rect x="${x-1}" y="${y}" width="3" height="1" fill="#ffd23f"/></g>`;
+    r += spk(3, 4, 0) + spk(28, 9, 1.3) + spk(4, 26, 2.6) + (pose ? spk(27, 22, .4) + spk(2, 14, .9) : '');
+  }
   return `<div class="avatar"><svg width="${px}" height="${px*H/W}" viewBox="0 0 ${W} ${H}">${r}</svg></div>`;
 }
 let wardOpen = false;
@@ -400,8 +440,9 @@ function viewJour(snap){
   const qPuz = q('str', puzT >= 1, '10 puzzles d\'échecs', `${puzT*10} puzzles aujourd'hui`, `+${RULES.puzzles}`,
      `<div class="row wrap"><button class="btn sm" data-act="puz">+ 1 série de 10</button>${puzT ? `<button class="btn sm ghost" data-act="unpuz">− annuler</button>` : ''}</div>`);
 
-  const qKcal = q('vit', kc >= RULES.kcalSeuil, `${RULES.kcalSeuil} kcal`, kc ? `${kc} kcal saisies · +${kcalXP(kc)} XP` : `Saisis ton total du jour · paliers à ${RULES.kcalSeuil/2}, ${RULES.kcalSeuil*3/4} et ${RULES.kcalSeuil} kcal`, `+${RULES.kcal}`,
-     `<div class="row"><input class="mid" type="number" inputmode="numeric" min="0" step="50" placeholder="total" value="${kc}" data-in="kcal"><span class="muted">kcal</span></div>`);
+  const gT = (S.grade || {})[t];
+  const qKcal = q('vit', !!gT, 'Ravitaillement', `Note la qualité de ce que tu as mangé · rang actuel : ${tierTxt(snap.tier)}`, gT ? `${gT} ${emo(gT)}` : '',
+     `${gradeRow(t)}<div class="row"><input class="mid" type="number" inputmode="numeric" min="0" step="50" placeholder="total" value="${kc}" data-in="kcal"><span class="muted">kcal</span></div>`);
 
   return `<div class="row"><div class="grow"><div class="ttl big">Quêtes du jour</div><div class="muted">${longDate(t)}</div></div>
      <div class="center"><div class="num big" style="color:var(--accent)">+${snap.todayXP} XP</div><div class="muted small">aujourd'hui</div></div></div>
@@ -409,6 +450,10 @@ function viewJour(snap){
    <div class="win"><div class="ttl" style="color:var(--accent)">QUOTIDIENNES</div>${qPerso}${qSeance}${qRev}${qLect}${qPuz}${qKcal}</div>
    ${tomorrowWin()}
    ${weekWin()}`;
+}
+function gradeRow(d){
+  const g = (S.grade || {})[d];
+  return `<div class="row wrap">${GRADES.map(x => `<button class="btn sm grade ${g===x?'pri':''}" data-act="grade" data-d="${d}" data-g="${x}">${x} ${emo(x)}</button>`).join('')}</div>`;
 }
 function tomorrowWin(){
   const d = addDays(today(), 1), tq = (S.tquests || []).find(x => x.date === d);
@@ -418,7 +463,7 @@ function tomorrowWin(){
   return `<div class="win flat col"><div class="ttl" style="font-size:9px;color:var(--accent)">ÉCRIRE LA QUÊTE DE DEMAIN</div>
     <div class="muted small">Une tâche précise pour demain. Réussie demain : +${RULES.queteDemain} XP dans la stat choisie.</div>
     <input placeholder="Ex. lire 100 pages de Karamazov" data-in="tqtext" maxlength="120">
-    <div class="row"><select data-in="tqstat" class="sel">${STATS.map(x => `<option value="${x.k}">${x.name}</option>`).join('')}</select>
+    <div class="row"><select data-in="tqstat" class="sel">${STATS.filter(x => x.k !== 'vit').map(x => `<option value="${x.k}">${x.name}</option>`).join('')}</select>
     <button class="btn" data-act="tqAdd">Créer</button></div></div>`;
 }
 function weekWin(){
@@ -430,6 +475,10 @@ function viewFiche(snap){
   const st = stageOf(snap.lv.for.lvl);
   const rows = STATS.map(s => {
     const l = snap.lv[s.k];
+    if (s.k === 'vit'){ const ka = kcalAvg();
+      return `<a href="#${s.page}" class="row stat-link" style="color:inherit;text-decoration:none;padding:6px 0">${ico(s.k)}
+      <div class="grow col" style="gap:4px"><div class="row"><span class="grow name" style="font-weight:500">${s.name}</span><span class="ttl" style="color:var(--${s.k})">${tierTxt(snap.tier)}</span></div>
+      <div class="row muted small"><span class="grow">${s.sub} · moyenne 30 jours</span><span class="num" style="font-size:17px">${ka ? ka.avg + ' kcal/j' : '— kcal/j'}</span></div></div></a>`; }
     const eloV = s.k === 'str' && S.elo.length ? ` · Elo ${S.elo[S.elo.length-1].v}` : '';
     return `<a href="#${s.page}" class="row stat-link" style="color:inherit;text-decoration:none;padding:6px 0">${ico(s.k)}
       <div class="grow col" style="gap:4px"><div class="row"><span class="grow name" style="font-weight:500">${s.name}</span><span class="num" style="color:var(--${s.k});font-size:19px">${l.xp} XP</span><span class="ttl" style="color:var(--${s.k})">NIV ${l.lvl}</span></div>
@@ -437,7 +486,7 @@ function viewFiche(snap){
   }).join('');
   return `<div class="win row" style="gap:14px"><div id="hero">${avatarSVG(st, 72)}</div>
      <div class="grow col"><div class="ttl xl">${esc(S.name)}</div><div class="muted small">Stade ${st+1}/6 · ${STAGES[st]}</div>
-     <div class="row wrap"><span class="ttl" style="white-space:nowrap">NIV. ${snap.perso}</span><span class="chip off">somme des niveaux ÷ 5</span></div></div></div>
+     <div class="row wrap"><span class="ttl" style="white-space:nowrap">NIV. ${snap.perso} · ${tierTxt(snap.tier)}</span></div></div></div>
    ${wardrobeWin()}
    <div class="win"><div class="ttl" style="color:var(--accent)">ATTRIBUTS</div>${rows}</div>
    ${weekWin()}
@@ -581,15 +630,21 @@ function viewStrategie(snap){
 }
 
 function viewVitalite(snap){
-  const t = today(), kc = S.kcal[t] || '';
+  const t = today(), kc = S.kcal[t] || '', tr = snap.tier, ka = kcalAvg();
   const days = Array.from({length:7}, (_,i) => addDays(t, -i));
-  return `${statHead('vit', snap)}
-   <div class="win"><div class="qt">Total du jour</div>
+  return `<a class="back" href="#fiche">‹ Fiche</a>
+   <div class="row">${ico('vit')}<div class="grow"><div class="ttl big">Ravitaillement</div>
+     <div class="ttl" style="font-size:16px;color:var(--vit);margin-top:6px">${tierTxt(tr)}</div>
+     <div class="muted small">${tr ? `Moyenne ${tr.avg.toFixed(2).replace('.', ',')} sur ${tr.n} jour${tr.n>1?'s':''} noté${tr.n>1?'s':''} (30 derniers jours)` : 'Note ta première journée pour obtenir un rang'}</div>
+     <div class="num" style="font-size:19px">${ka ? `${ka.avg} kcal/jour en moyenne (${ka.n} j saisis)` : 'Pas encore de calories saisies'}</div></div></div>
+   <div class="win"><div class="qt">Qualité du jour</div>${gradeRow(t)}
+     <div class="qt" style="margin-top:8px">Total du jour</div>
      <div class="row"><input class="mid" type="number" inputmode="numeric" min="0" step="50" placeholder="kcal" value="${kc}" data-in="kcal"><span class="muted">kcal · objectif ${RULES.kcalSeuil}</span></div>
-     ${bar((kc||0)/RULES.kcalSeuil, 'vit')}<div class="muted small">Paliers : ${[2,3,4].map(i => `${RULES.kcalSeuil*i/4} kcal = ${i*10} XP`).join(' · ')}. Aujourd'hui : +${kcalXP(kc)} XP.</div></div>
+     ${bar((kc||0)/RULES.kcalSeuil, 'vit')}
+     <div class="muted small">S 🥩 excellent · A 🍗 bon · B 🍝 moyen · C 🍔 mauvais. Ton rang change l'allure de ton personnage.</div></div>
    <div class="sec">7 derniers jours</div>
-   <div class="win flat log">${days.map(d => { const v = S.kcal[d]; return `<div><span class="d">${shortDate(d)}</span><span class="grow">${v ? v+' kcal' : '<span class="muted">—</span>'}</span><span class="xp">${kcalXP(v) ? '+'+kcalXP(v) : ''}</span></div>`; }).join('')}</div>
-   <div class="muted small">Oublié de saisir hier ? Ouvre « Sauvegarde et réglages » : la saisie d'un jour passé y est possible.</div>`;
+   <div class="win flat log">${days.map(d => { const v = S.kcal[d], g = (S.grade || {})[d]; return `<div><span class="d">${shortDate(d)}</span><span class="grow">${v ? v+' kcal' : '<span class="muted">—</span>'}</span><span class="xp">${g ? g+' '+emo(g) : ''}</span></div>`; }).join('')}</div>
+   <div class="muted small">Oublié de noter hier ? Ouvre « Sauvegarde et réglages » : la saisie d'hier y est possible.</div>`;
 }
 
 function viewReglages(){
@@ -602,18 +657,18 @@ function viewReglages(){
      <button class="btn" data-act="export">Exporter une sauvegarde</button>
      <label class="btn ghost center">Importer une sauvegarde<input type="file" accept=".json,application/json,text/plain" data-in="import" hidden></label></div>
    <div class="win flat col"><div class="qt">Rattraper hier (${shortDate(y)})</div>
-     <div class="row"><input class="mid" type="number" inputmode="numeric" placeholder="kcal" value="${S.kcal[y] || ''}" data-in="kcalY"><span class="muted">kcal</span></div>
+     ${gradeRow(y)}<div class="row"><input class="mid" type="number" inputmode="numeric" placeholder="kcal" value="${S.kcal[y] || ''}" data-in="kcalY"><span class="muted">kcal</span></div>
      <div class="row wrap"><button class="btn sm" data-act="puzY">+10 puzzles hier</button></div></div>
    <div class="win flat col"><div class="qt">Nom du personnage</div><input value="${esc(S.name)}" data-in="name"></div>
    <div class="win flat col"><div class="qt">Règles actuelles</div><div class="muted small">
-     Niveau n d'une stat : 100 × n XP. Niveau perso : somme des 5 niveaux ÷ 5.<br>
+     Niveau n d'une stat : 100 × n XP. Niveau perso : somme des niveaux Force, Savoir, Sagesse, Stratégie ÷ 4.<br>
      Force : ${RULES.seance} XP/séance (charges gérées par toi, préremplies avec la dernière saisie), +${RULES.semaine4} à la 4e séance de la semaine, +${RULES.record} par record (charge plus lourde avec toutes les séries réussies).<br>
      Savoir : ${RULES.pomo} XP par 25 min de révision, ${RULES.etapeCours} XP par étape de cours (lu, appris, quiz, maîtrisé), +${RULES.examen} par examen. Sagesse : ${RULES.page} XP/page, +${RULES.livre} par livre.<br>
-     Stratégie : ${RULES.puzzles} XP par série de 10 puzzles. Ravitaillement : objectif ${RULES.kcalSeuil} kcal ; 20 XP à 50 %, 30 XP à 75 %, ${RULES.kcal} XP à 100 %.<br>
+     Stratégie : ${RULES.puzzles} XP par série de 10 puzzles. Ravitaillement : pas d'XP ; rang = moyenne de tes notes C/B/A/S sur 30 jours (jours sans note ignorés), lettre la plus proche. Il change l'allure du personnage.<br>
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v0.9</div>`;
+   <div class="muted small center">Life RPG · prototype v1.0</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -634,7 +689,7 @@ function render(){
   document.getElementById('tabs').innerHTML = TABS.map(([k,l]) => `<a href="#${k}" class="${k===parent?'on':''}"><i></i>${l}</a>`).join('');
   if (render.keepScroll) window.scrollTo(0, y); render.keepScroll = false;
   // Montée de niveau ?
-  if (lastLevels){ for (const s of STATS) if (snap.lv[s.k].lvl > lastLevels[s.k]) toast(`★ ${s.name} niveau ${snap.lv[s.k].lvl} ! ★`, 'lvl', 4000); }
+  if (lastLevels){ for (const s of STATS) if (s.k !== 'vit' && snap.lv[s.k].lvl > lastLevels[s.k]) toast(`★ ${s.name} niveau ${snap.lv[s.k].lvl} ! ★`, 'lvl', 4000); }
   if (lastLevels && snap.perso > lastLevels.perso){
     const rw = REWARDS.filter(i => i.lvl > lastLevels.perso && i.lvl <= snap.perso).map(i => i.label).join(', ');
     toast(`★ Niveau ${snap.perso} !${rw ? ' Récompense : ' + rw : ''} ★`, 'lvl', 5000);
@@ -678,6 +733,8 @@ const ACTS = {
     S.tquests = (S.tquests || []).filter(x => x.date !== d); S.tquests.push({id:uid(), date:d, stat: val('tqstat') || 'sag', text, done:null}); toast('Quête prête pour demain'); },
   tqDel(el){ const q = S.tquests.find(x => x.id === el.dataset.id); S.tquests = S.tquests.filter(x => x !== q); setTimeout(() => { const i = document.querySelector('[data-in=tqtext]'); if (i && q) { i.value = q.text; document.querySelector('[data-in=tqstat]').value = q.stat; } }, 0); },
   tqDone(el){ const q = S.tquests.find(x => x.id === el.dataset.id); q.done = q.done ? null : today(); if (q.done) toast(`Quête réussie ! +${RULES.queteDemain} XP`); },
+  grade(el){ S.grade = S.grade || {}; const d = el.dataset.d, g = el.dataset.g;
+    if (S.grade[d] === g) delete S.grade[d]; else { S.grade[d] = g; { const tr = tierOf(); toast(`${g} ${GEMO[g]} noté · rang ${tr.letter}-tier ${GEMO[tr.letter]}`); }; } },
   sound(){ S.sound = S.sound === false; if (S.sound) setTimeout(() => play('quete'), 50); },
   outfit(el){ S.outfit = Object.assign({}, S.outfit, {[el.dataset.part]: el.dataset.v}); },
   pages(el){
@@ -748,7 +805,7 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const el = e.target, k = el.dataset.in; if (!k) return; const before = snapshot();
   const num = parseFloat(String(el.value).replace(',', '.'));
-  if (k === 'kcal' || k === 'kcalY'){ const d = k === 'kcal' ? today() : addDays(today(), -1); if (num > 0) S.kcal[d] = Math.round(num); else delete S.kcal[d]; if (k === 'kcal' && kcalXP(num)) toast(`${kcalXP(num)} XP Ravitaillement aujourd'hui`); }
+  if (k === 'kcal' || k === 'kcalY'){ const d = k === 'kcal' ? today() : addDays(today(), -1); if (num > 0) S.kcal[d] = Math.round(num); else delete S.kcal[d]; }
   else if (k === 'kg'){ const c = ensureCur(); c.ex[el.dataset.id].kg = isNaN(num) ? null : num; }
   else if (k === 'load'){ if (isNaN(num)) delete S.loads[el.dataset.id]; else S.loads[el.dataset.id] = num;
     if (S.cur && S.cur.ex[el.dataset.id] && !S.cur.ex[el.dataset.id].sets.some(x => x)) S.cur.ex[el.dataset.id].kg = isNaN(num) ? null : num; }
@@ -774,9 +831,11 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) rend
 let poseI = 0;
 setInterval(() => {
   const el = document.getElementById('hero'); if (!el || document.hidden) return;
-  const st = stageOf(snapshot().lv.for.lvl), pose = ['thumb', 'wink', 'flex'][poseI++ % 3];
-  el.innerHTML = avatarSVG(st, 72, S.outfit, pose); el.classList.add('hop');
-  setTimeout(() => { el.classList.remove('hop'); if (document.getElementById('hero') === el) el.innerHTML = avatarSVG(st, 72); }, 900);
+  const st = stageOf(snapshot().lv.for.lvl), tr = curTier();
+  const seq = tr === 'C' ? ['yawn', 'thumb', 'yawn'] : ['thumb', 'wink', 'flex'];   // C : fatigué, il bâille
+  const pose = seq[poseI++ % 3], hop = tr === 'C' ? 'hop-soft' : tr === 'S' ? 'hop-big' : 'hop';
+  el.innerHTML = avatarSVG(st, 72, S.outfit, pose, tr); el.classList.add(hop);
+  setTimeout(() => { el.classList.remove(hop); if (document.getElementById('hero') === el) el.innerHTML = avatarSVG(st, 72); }, 900);
 }, 20000);
 load(); migrate(); render();
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js', {updateViaCache:'none'});
