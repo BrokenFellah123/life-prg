@@ -692,4 +692,4 @@ window.addEventListener('hashchange', () => { window.scrollTo(0,0); render(); })
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
 
 load(); render();
-if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js');
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js', {updateViaCache:'none'});
