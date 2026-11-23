@@ -141,3 +141,5 @@ select.sel{flex:1;background:var(--track);border:2px solid var(--line);border-ra
 .btn.grade{min-width:56px}
 .emo{font-family:system-ui,sans-serif;font-size:1.5em;line-height:1;vertical-align:middle}
 @media (prefers-reduced-motion:reduce){#hero.hop,#hero.hop-big,#hero.hop-soft{animation:none}.spk{animation:none;opacity:1}}
+details.fold>summary.ttl{font-size:10px;color:var(--accent);padding:2px 0}
+details.fold:not([open]){padding-top:10px;padding-bottom:10px}

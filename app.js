@@ -88,6 +88,8 @@ const blank = () => ({
   elo:[],           // {date,v}
   kcal:{},          // date → total
   grade:{},         // date → note de qualité C / B / A / S
+  mquests:[],       // quêtes principales / secondaires {id,type:'main'|'side',text,done}
+  fold:{},          // sections repliées de l'onglet Quêtes
 });
 let S;
 function load(){
@@ -156,6 +158,7 @@ function computeEvents(){
   for (const c of S.courses) for (const k in SN) if (c.steps[k]) push(c.steps[k], 'sav', RULES.etapeCours, `${c.name} : ${SN[k]}`);
   for (const d in S.pomo) if (S.pomo[d] > 0) push(d, 'sav', S.pomo[d]*RULES.pomo, `Révision : ${S.pomo[d]} × 25 min`);
   for (const q of S.tquests || []) if (q.done) push(q.done, q.stat, RULES.queteDemain, `Quête du jour : ${q.text}`);
+  for (const q of S.mquests || []) if (q.done && q.xp > 0 && q.stat) push(q.done, q.stat, q.xp, `Quête ${q.type === 'main' ? 'principale' : 'secondaire'} : ${q.text}`);
   for (const x of S.exams) if (x.passed) push(x.passed, 'sav', RULES.examen, `Examen réussi : ${x.name}`);
   // Sagesse
   const bt = id => (S.books.find(b => b.id === id) || {}).title || 'Livre';
@@ -184,6 +187,7 @@ function activeDays(){
   S.puzzles.forEach(p => s.add(p.date)); S.elo.forEach(e => s.add(e.date));
   Object.keys(S.kcal).forEach(d => S.kcal[d] > 0 && s.add(d));
   Object.keys(S.grade || {}).forEach(d => s.add(d));
+  (S.mquests || []).forEach(q => q.done && s.add(q.done));
   Object.keys(S.pomo).forEach(d => S.pomo[d] > 0 && s.add(d));
   return s;
 }
@@ -329,7 +333,11 @@ function avatarSVG(stage, px, outfit = S.outfit || {}, pose = '', tier = curTier
   return `<div class="avatar"><svg width="${px}" height="${px*H/W}" viewBox="0 0 ${W} ${H}">${r}</svg></div>`;
 }
 let wardOpen = false;
-document.addEventListener('toggle', e => { if (e.target.id === 'wardrobe') wardOpen = e.target.open; }, true);
+document.addEventListener('toggle', e => {
+  const id = e.target.id || '';
+  if (id === 'wardrobe') wardOpen = e.target.open;
+  if (id.startsWith('fold-')){ S.fold = S.fold || {}; S.fold[id.slice(5)] = e.target.open; save(); }
+}, true);
 function wardrobeWin(){
   const o = Object.assign({}, OUTFIT0, S.outfit);
   const sw = (part, it) => {
@@ -444,12 +452,32 @@ function viewJour(snap){
   const qKcal = q('vit', !!gT, 'Ravitaillement', `Note la qualité de ce que tu as mangé · rang actuel : ${tierTxt(snap.tier)}`, gT ? `${gT} ${emo(gT)}` : '',
      `${gradeRow(t)}<div class="row"><input class="mid" type="number" inputmode="numeric" min="0" step="50" placeholder="total" value="${kc}" data-in="kcal"><span class="muted">kcal</span></div>`);
 
-  return `<div class="row"><div class="grow"><div class="ttl big">Quêtes du jour</div><div class="muted">${longDate(t)}</div></div>
+  const nDone = [!!(w || rest), pomo >= 2, pagesT >= RULES.objectifPages, puzT >= 1, !!gT].filter(Boolean).length;
+  return `<div class="row"><div class="grow"><div class="ttl big">Quêtes</div><div class="muted">${longDate(t)}</div></div>
      <div class="center"><div class="num big" style="color:var(--accent)">+${snap.todayXP} XP</div><div class="muted small">aujourd'hui</div></div></div>
    ${retour}
-   <div class="win"><div class="ttl" style="color:var(--accent)">QUOTIDIENNES</div>${qPerso}${qSeance}${qRev}${qLect}${qPuz}${qKcal}</div>
-   ${tomorrowWin()}
+   ${fold('daily', `QUÊTES QUOTIDIENNES · ${nDone}/5`, `${qSeance}${qRev}${qLect}${qPuz}${qKcal}`)}
+   ${fold('demain', `QUÊTE DU LENDEMAIN${tq ? ` · ${tq.done ? 1 : 0}/1` : ''}`, `${qPerso}${tomorrowWin()}`)}
+   ${fold('main', `QUÊTES PRINCIPALES${mqCount('main')}`, mqList('main'))}
+   ${fold('side', `QUÊTES SECONDAIRES${mqCount('side')}`, mqList('side'))}
    ${weekWin()}`;
+}
+// Section repliable (toucher le titre ouvre / ferme), état mémorisé
+function fold(id, title, body){
+  const open = (S.fold || {})[id] !== false;
+  return `<details class="win fold" id="fold-${id}" ${open ? 'open' : ''}><summary class="ttl">${title}</summary><div class="col" style="gap:8px;margin-top:6px">${body}</div></details>`;
+}
+function mqCount(type){ const l = (S.mquests || []).filter(q => q.type === type); return l.length ? ` · ${l.filter(q => q.done).length}/${l.length}` : ''; }
+function mqList(type){
+  const l = (S.mquests || []).filter(q => q.type === type);
+  const items = l.map(q => `<div class="quest ${q.done?'dn':''}">${check(!!q.done, 'mqDone', `data-id="${q.id}"`)}<div class="grow col">
+     <div class="row"><span class="grow qt name">${esc(q.text)}</span>${q.xp ? `<span class="xp">+${q.xp}</span>` : ''}</div>
+     <div class="row">${q.stat ? `<span class="chip" style="background:var(--${q.stat})">${STATS.find(x=>x.k===q.stat).abbr}</span>` : ''}<span class="grow muted small">${q.done ? `Réussie le ${shortDate(q.done)}` : ''}</span><button class="btn sm ghost" data-act="mqDel" data-id="${q.id}">×</button></div></div></div>`).join('');
+  return `${items || `<div class="muted small">Aucune quête pour l'instant.</div>`}
+    <div class="win flat col"><input placeholder="Nouvelle quête ${type === 'main' ? 'principale' : 'secondaire'}" data-in="mq-${type}" maxlength="120">
+    <div class="row"><select data-in="mqs-${type}" class="sel">${STATS.filter(x => x.k !== 'vit').map(x => `<option value="${x.k}">${x.name}</option>`).join('')}</select>
+    <input class="mid" type="number" inputmode="numeric" min="1" max="100" step="5" placeholder="XP" data-in="mqx-${type}"><span class="muted">XP</span>
+    <button class="btn sm" data-act="mqAdd" data-t="${type}">Créer</button></div></div>`;
 }
 function gradeRow(d){
   const g = (S.grade || {})[d];
@@ -665,15 +693,15 @@ function viewReglages(){
      Force : ${RULES.seance} XP/séance (charges gérées par toi, préremplies avec la dernière saisie), +${RULES.semaine4} à la 4e séance de la semaine, +${RULES.record} par record (charge plus lourde avec toutes les séries réussies).<br>
      Savoir : ${RULES.pomo} XP par 25 min de révision, ${RULES.etapeCours} XP par étape de cours (lu, appris, quiz, maîtrisé), +${RULES.examen} par examen. Sagesse : ${RULES.page} XP/page, +${RULES.livre} par livre.<br>
      Stratégie : ${RULES.puzzles} XP par série de 10 puzzles. Ravitaillement : pas d'XP ; rang = moyenne de tes notes C/B/A/S sur 30 jours (jours sans note ignorés), lettre la plus proche. Il change l'allure du personnage.<br>
-     Quête du lendemain réussie : +${RULES.queteDemain} XP. Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
+     Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.0</div>`;
+   <div class="muted small center">Life RPG · prototype v1.1</div>`;
 }
 
 /* ================= Rendu et routage ================= */
 const VIEWS = {jour:viewJour, fiche:viewFiche, force:viewForce, savoir:viewSavoir, sagesse:viewSagesse, strategie:viewStrategie, vitalite:viewVitalite, reglages:viewReglages};
-const TABS = [['jour','Jour'],['fiche','Fiche'],['force','Force'],['savoir','Cours']];
+const TABS = [['jour','Quêtes'],['fiche','Fiche'],['force','Force'],['savoir','Cours']];
 let lastLevels = null;
 function route(){ const r = location.hash.slice(1).split('/')[0]; return VIEWS[r] ? r : 'jour'; }
 const routeArg = () => decodeURIComponent(location.hash.slice(1).split('/')[1] || '');
@@ -733,6 +761,12 @@ const ACTS = {
     S.tquests = (S.tquests || []).filter(x => x.date !== d); S.tquests.push({id:uid(), date:d, stat: val('tqstat') || 'sag', text, done:null}); toast('Quête prête pour demain'); },
   tqDel(el){ const q = S.tquests.find(x => x.id === el.dataset.id); S.tquests = S.tquests.filter(x => x !== q); setTimeout(() => { const i = document.querySelector('[data-in=tqtext]'); if (i && q) { i.value = q.text; document.querySelector('[data-in=tqstat]').value = q.stat; } }, 0); },
   tqDone(el){ const q = S.tquests.find(x => x.id === el.dataset.id); q.done = q.done ? null : today(); if (q.done) toast(`Quête réussie ! +${RULES.queteDemain} XP`); },
+  mqAdd(el){ const t = el.dataset.t, text = val('mq-' + t); if (!text) return toast('Écris ta quête');
+    const xp = Math.max(0, Math.min(100, Math.round(parseFloat(val('mqx-' + t)) || 0)));
+    if (!xp) return toast('Indique l\'XP (de 1 à 100)');
+    S.mquests = S.mquests || []; S.mquests.push({id: uid(), type: t, text, stat: val('mqs-' + t) || 'sag', xp, done: null}); toast('Quête créée'); },
+  mqDone(el){ const q = (S.mquests || []).find(x => x.id === el.dataset.id); if (q) q.done = q.done ? null : today(); },
+  mqDel(el){ S.mquests = (S.mquests || []).filter(x => x.id !== el.dataset.id); },
   grade(el){ S.grade = S.grade || {}; const d = el.dataset.d, g = el.dataset.g;
     if (S.grade[d] === g) delete S.grade[d]; else { S.grade[d] = g; { const tr = tierOf(); toast(`${g} ${GEMO[g]} noté · rang ${tr.letter}-tier ${GEMO[tr.letter]}`); }; } },
   sound(){ S.sound = S.sound === false; if (S.sound) setTimeout(() => play('quete'), 50); },
