@@ -41,7 +41,7 @@ const ACTS = {quete:'Valider une quête', onglet:'Changer d’onglet', attribut:
 document.getElementById('list').innerHTML = Object.keys(SOUNDS).map(t => `<section class="${t}"><h2>${NAMES[t]}${t==='clinic' ? ' · nouveaux sons médicaux' : ''}</h2>
   ${Object.keys(ACTS).map(a => `<div class="act"><span>${ACTS[a]}</span>${PICK[t] ? `<button data-t="${t}" data-a="${a}" data-v="${PICK[t][a]}" style="width:136px">${PICK[t][a]} ✓ choisi</button>` : `<button data-t="${t}" data-a="${a}" data-v="A">A</button><button data-t="${t}" data-a="${a}" data-v="B">B</button>`}</div>`).join('')}
   </section>`).join('');
-document.addEventListener('click', e => { const b = e.target.closest('button[data-t]'); if (b) SOUNDS[b.dataset.t][b.dataset.a][b.dataset.v](); });
+document.addEventListener('click', e => { const b = e.target.closest('button[data-t]'); if (b) playSound(SOUNDS[b.dataset.t][b.dataset.a][b.dataset.v]); });
 </script>
 </body>
 </html>

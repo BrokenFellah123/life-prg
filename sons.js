@@ -2,10 +2,30 @@
    SOUNDS[thème][action][version] = fonction qui joue le son. */
 'use strict';
 let AC = null;
+/* iOS Safari met le contexte audio en pause (« suspended » / « interrupted ») après une mise en veille,
+   un passage en arrière-plan, un appel ou un autre son, et le reprend parfois mal.
+   Parade : on recrée un contexte neuf à chaque retour au premier plan, on le réveille à chaque toucher,
+   et on attend qu'il tourne vraiment avant de jouer. */
 function ac(){
-  if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
-  if (AC.state === 'suspended') AC.resume();
+  if (!AC || AC.state === 'closed') AC = new (window.AudioContext || window.webkitAudioContext)();
   return AC;
+}
+function unlock(){
+  const c = ac();
+  if (c.state !== 'running') c.resume().catch(() => {});
+  try { const b = c.createBuffer(1, 1, 22050), s = c.createBufferSource(); s.buffer = b; s.connect(c.destination); s.start(0); } catch {}
+}
+function resetAudio(){ if (AC) { try { AC.close(); } catch {} } AC = null; }
+document.addEventListener('touchstart', unlock, {passive:true, capture:true});
+document.addEventListener('pointerdown', unlock, {passive:true, capture:true});
+document.addEventListener('visibilitychange', () => { if (document.hidden) resetAudio(); });
+window.addEventListener('pagehide', resetAudio);
+// Joue fn() dès que le contexte tourne ; s'il refuse de reprendre, on en recrée un et on réessaie une fois
+function playSound(fn){
+  const c = ac();
+  if (c.state === 'running') { fn(); return; }
+  c.resume().then(() => { if (c.state === 'running') fn(); else { resetAudio(); ac().resume().then(fn).catch(() => {}); } })
+           .catch(() => { resetAudio(); ac().resume().then(fn).catch(() => {}); });
 }
 // Note simple avec enveloppe
 function tone({f = 440, f2 = null, type = 'sine', t = 0, d = 0.1, v = 0.2, a = 0.005}){

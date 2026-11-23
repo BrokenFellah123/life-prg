@@ -605,7 +605,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v0.6</div>`;
+   <div class="muted small center">Life RPG · prototype v0.6.1</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -641,7 +641,7 @@ const SOUND_PICK = {
   clinic: {quete:'A', onglet:'A', attribut:'B', niveau:'B'}};
 function play(action){
   if (S.sound === false || typeof SOUNDS === 'undefined') return;
-  try { const t = theme(); SOUNDS[t][action][SOUND_PICK[t][action]](); } catch {}
+  try { const t = theme(); playSound(SOUNDS[t][action][SOUND_PICK[t][action]]); } catch {}
 }
 // Après une action : son de niveau si une stat ou le perso monte, sinon son de quête si de l'XP a été gagnée
 function feedback(before){
