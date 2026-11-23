@@ -307,25 +307,9 @@ function wardrobeWin(){
 
 /* ================= Composants ================= */
 const bar = (p, c) => `<div class="bar" style="--c:var(--${c})"><b style="width:${Math.max(0,Math.min(100,Math.round(p*100)))}%"></b></div>`;
-const PIECES = {for:'♜', sav:'♝', sag:'♛', str:'♞', vit:'♚'};
-const SVGI = {
-  for:'<svg viewBox="0 0 24 24"><path d="M3 10v4M6 7v10M18 7v10M21 10v4M6 12h12"/></svg>',
-  sav:'<svg viewBox="0 0 24 24"><path d="M6 3v6a4 4 0 0 0 8 0V3M10 13v3a4 4 0 0 0 8 0v-3"/><circle cx="18" cy="11" r="2"/></svg>',
-  sag:'<svg viewBox="0 0 24 24"><path d="M3 5h6a3 3 0 0 1 3 3v12a2 2 0 0 0-2-2H3zM21 5h-6a3 3 0 0 0-3 3v12a2 2 0 0 1 2-2h7z"/></svg>',
-  str:'<svg viewBox="0 0 24 24"><path d="M7 21h11M8 21l1.5-5L7 14l3.5-8 4.5 1.5 2 5-3 .5 1 8"/><circle cx="12.5" cy="9" r=".6"/></svg>',
-  vit:'<svg viewBox="0 0 24 24"><path d="M3 12h4l2-5 3 10 2-5h7"/></svg>'};
-const THEMES = [
-  {k:'pixel',  name:'Pixel 16 bits',        sw:['#0d1230','#24348f','#ffd23f'], meta:'#0d1230'},
-  {k:'chess',  name:'Échiquier de tournoi', sw:['#f2f1ec','#151515','#1f5a47'], meta:'#f2f1ec'},
-  {k:'clinic', name:'Moniteur clinique',    sw:['#071519','#0e2329','#3ad1c5'], meta:'#071519'}];
-const theme = () => THEMES.some(t => t.k === S.theme) ? S.theme : 'pixel';
-const ico = k => { const t = theme();
-  const inner = t === 'chess' ? PIECES[k] + '︎' : t === 'clinic' ? SVGI[k] : STATS.find(s=>s.k===k).abbr;
-  return `<div class="ico" style="--c:var(--${k})">${inner}</div>`; };
-function applyTheme(){
-  const t = theme(); document.documentElement.dataset.theme = t;
-  const m = document.querySelector('meta[name=theme-color]'); if (m) m.content = THEMES.find(x => x.k === t).meta;
-}
+const theme = () => 'pixel';   // un seul thème : Pixel 16 bits
+const ico = k => `<div class="ico" style="--c:var(--${k})">${STATS.find(s=>s.k===k).abbr}</div>`;
+function applyTheme(){ document.documentElement.dataset.theme = 'pixel'; }
 const check = (done, act, data='') => act
   ? `<button class="check ${done?'done':''}" data-act="${act}" ${data} aria-label="cocher">${done?'✓':''}</button>`
   : `<div class="check ${done?'done':''}">${done?'✓':''}</div>`;
@@ -613,8 +597,6 @@ function viewReglages(){
   return `<a class="back" href="#fiche">‹ Fiche</a><div class="ttl big">Sauvegarde et réglages</div>
    <div class="win flat row"><div class="grow"><div class="qt">Sons</div><div class="muted small">Coupés aussi quand l'iPhone est en silencieux.</div></div>
      <button class="btn sm ${S.sound === false ? '' : 'pri'}" data-act="sound">${S.sound === false ? 'Coupés' : 'Activés'}</button></div>
-   <div class="win flat col"><div class="qt">Thème</div><div class="themes">${THEMES.map(t => `<button class="theme-opt ${theme()===t.k?'on':''}" data-act="theme" data-t="${t.k}"><span class="sw3">${t.sw.map(c => `<i style="background:${c}"></i>`).join('')}</span>${t.name}</button>`).join('')}</div>
-     <div class="muted small">L'avatar reste en pixel art dans tous les thèmes.</div></div>
    <div class="win flat col"><div class="qt">Sauvegarde</div>
      <div class="muted small">Tes données sont uniquement sur cet appareil. Exporte une sauvegarde de temps en temps (par exemple chaque dimanche) et range-la dans iCloud Drive. Elle sert aussi à passer du PC à l'iPhone.</div>
      <button class="btn" data-act="export">Exporter une sauvegarde</button>
@@ -631,7 +613,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v0.8.1</div>`;
+   <div class="muted small center">Life RPG · prototype v0.9</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -661,10 +643,7 @@ function render(){
 }
 function commit(){ save(); render.keepScroll = true; render(); }
 /* ---- Sons choisis (voir sons.js) ---- */
-const SOUND_PICK = {
-  pixel:  {quete:'A', onglet:'B', attribut:'B', niveau:'B'},
-  chess:  {quete:'A', onglet:'B', attribut:'A', niveau:'B'},
-  clinic: {quete:'A', onglet:'A', attribut:'B', niveau:'B'}};
+const SOUND_PICK = {pixel: {quete:'A', onglet:'B', attribut:'B', niveau:'B'}};
 function play(action){
   if (S.sound === false || typeof SOUNDS === 'undefined') return;
   try { const t = theme(); playSound(SOUNDS[t][action][SOUND_PICK[t][action]]); } catch {}
@@ -699,7 +678,6 @@ const ACTS = {
     S.tquests = (S.tquests || []).filter(x => x.date !== d); S.tquests.push({id:uid(), date:d, stat: val('tqstat') || 'sag', text, done:null}); toast('Quête prête pour demain'); },
   tqDel(el){ const q = S.tquests.find(x => x.id === el.dataset.id); S.tquests = S.tquests.filter(x => x !== q); setTimeout(() => { const i = document.querySelector('[data-in=tqtext]'); if (i && q) { i.value = q.text; document.querySelector('[data-in=tqstat]').value = q.stat; } }, 0); },
   tqDone(el){ const q = S.tquests.find(x => x.id === el.dataset.id); q.done = q.done ? null : today(); if (q.done) toast(`Quête réussie ! +${RULES.queteDemain} XP`); },
-  theme(el){ S.theme = el.dataset.t; },
   sound(){ S.sound = S.sound === false; if (S.sound) setTimeout(() => play('quete'), 50); },
   outfit(el){ S.outfit = Object.assign({}, S.outfit, {[el.dataset.part]: el.dataset.v}); },
   pages(el){
