@@ -426,10 +426,11 @@ function drawWorld(r, snap){
   const show = r === 'jour' || r === 'fiche';
   document.body.classList.toggle('has-scene', show);
   if (!show){ box.innerHTML = ''; return; }
-  const W = Math.min(190, Math.round(Math.min(innerWidth, 560) / 3)), H = r === 'jour' ? 48 : 58;
+  const W = Math.min(190, Math.round(Math.min(innerWidth, 560) / 3)), H = r === 'jour' ? 64 : 60;
   box.className = r === 'jour' ? 'land' : 'home';
   box.innerHTML = `<canvas width="${W}" height="${H}"></canvas><div class="sc-over"></div>`;
   const cv = box.querySelector('canvas'), over = box.querySelector('.sc-over');
+  document.body.style.setProperty('--sh', Math.round(box.clientWidth * H / W) + 'px');
   if (r === 'jour'){
     const w = landscape(cv, today(), mood), n = dailyDone();
     const fx = Math.round(w.fireX * W);
@@ -438,7 +439,7 @@ function drawWorld(r, snap){
     const avX = w.fire ? (fx - 16) * scale : box.clientWidth * .42;
     over.innerHTML = `<div class="sc-av" style="left:${Math.round(avX)}px">${avatarSVG(stageOf(snap.lv.for.lvl), 44)}</div>
       ${w.fire && mood !== 'jour' ? `<div class="sc-glow" style="left:${Math.round(fx * scale)}px"></div>` : ''}
-      <div class="sc-bub" style="left:${Math.max(8, Math.min(box.clientWidth - 230, Math.round(avX) - 90))}px">${esc(bubbleLine(w, n, 5, mood === 'nuit', S.name))}</div>
+      <div class="sc-bub" style="left:${Math.max(8, Math.min(box.clientWidth - 198, Math.round(avX) - 70))}px">${esc(bubbleLine(w, n, 5, mood === 'nuit', S.name))}</div>
       <div class="sc-place">${BIOMES[w.biome].name}${w.castle ? ' · château en vue' : ''}${w.river ? ' · rivière' : ''}</div>`;
     clearInterval(drawWorld.fire);
     if (w.fire) { let t = 0; drawWorld.fire = setInterval(() => { if (!document.hidden && document.contains(cv)) drawFire(cv.getContext('2d'), fx, H - 3, ++t); }, 450); }
@@ -449,7 +450,7 @@ function drawWorld(r, snap){
   }
 }
 // Le ciel change même sans toucher l'écran (aube, jour, crépuscule, nuit)
-setInterval(() => { if (!document.hidden && skyMood() !== worldMood) render(); }, 60000);
+setInterval(() => { if (document.hidden) return; if (skyMood() !== worldMood) render(); else drawWorld(route(), snapshot()); }, 60000);   // le soleil avance chaque minute
 function viewJour(snap){
   const t = today();
   const w = doneToday(), rest = S.rest.includes(t);
@@ -734,7 +735,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.2</div>`;
+   <div class="muted small center">Life RPG · prototype v1.2.1</div>`;
 }
 
 /* ================= Rendu et routage ================= */

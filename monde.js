@@ -79,11 +79,12 @@ function landscape(canvas, dateStr, mood){
   ctx.clearRect(0, 0, W, H);
   const w = dayWorld(dateStr), r = w.r, B = BIOMES[w.biome];
   const N = tintOf(mood);
-  sunMoon(ctx, mood, W - 22, 4, H);
+  skyBand(ctx, W, H, mood);
+  sunMoon(ctx, mood, Math.round(W * .84), 10, H, W);
   // montagnes au loin
   const far = N(B.far), snow = N('#f4f7ff');
   let peaks = []; const np = 3 + Math.floor(r() * 3);
-  for (let i = 0; i < np; i++) peaks.push({x: (i + .2 + r() * .6) / np * W, h: 12 + r() * 16});
+  for (let i = 0; i < np; i++) peaks.push({x: (i + .2 + r() * .6) / np * W, h: 10 + r() * 14});
   for (let x = 0; x < W; x++){
     let top = H;
     for (const p of peaks){ const y = H - 20 - p.h + Math.abs(x - p.x) * .9; if (y < top) top = y; }
@@ -162,17 +163,37 @@ function drawHome(ctx, cx, gy, st, night, N){
     window1(-8, 18); window1(5, 18); window1(-1, 33); for (let i = -26; i < 26; i += 9) if (Math.abs(i) > 12) window1(i, 6);
   }
 }
-function sunMoon(ctx, mood, x, y, H){
-  if (mood === 'nuit'){ px(ctx, x, y, 5, 5, '#f4f1d8'); px(ctx, x + 2, y, 3, 3, '#0b1030'); return; }
-  const low = mood !== 'jour', c = low ? '#ff9a4a' : '#ffe27a', yy = low ? H - 26 : y;   // soleil bas à l'aube et au crépuscule
-  px(ctx, x - 1, yy, 7, 7, c); px(ctx, x, yy - 1, 5, 9, c); px(ctx, x - 2, yy + 1, 9, 5, c);
+// Ciel peint dans la bande (net, en paliers de pixels), raccord avec le ciel de l'écran
+const SKY = {jour:['#9cd1f9','#b9e2ff'], nuit:['#281b33','#2b1d2a'], aube:['#e0909a','#ffb070'], crep:['#d46d6a','#ff8a4a']};
+function skyBand(ctx, W, H, mood){
+  const [a, b] = SKY[mood], n = 6;
+  for (let i = 0; i < n; i++) px(ctx, 0, Math.floor(i * H / n), W, Math.ceil(H / n) + 1, mix(a, b, i / (n - 1)));
+  if (mood === 'nuit'){ const r = seeded('etoiles'); for (let i = 0; i < W / 9; i++) px(ctx, Math.floor(r() * W), Math.floor(r() * H * .5), 1, 1, r() < .3 ? '#ffe9a8' : '#ffffff'); }
 }
+function disc(ctx, cx, cy, rad, c){ for (let dy = -rad; dy <= rad; dy++){ const w = Math.round(Math.sqrt(rad*rad - dy*dy)); px(ctx, cx - w, cy + dy, 2*w + 1, 1, c); } }
+// Soleil (ou lune) en second plan : dessiné avant le paysage, donc derrière les montagnes
+function sunMoon(ctx, mood, x, y, H, W){
+  if (mood === 'nuit'){ disc(ctx, x, y + 2, 6, '#f4f1d8'); disc(ctx, x + 3, y, 5, SKY.nuit[0]); return; }
+  // Le soleil suit l'heure : il sort de derrière les collines à 6h45, monte jusqu'à midi et demi, redescend et disparaît à 18h15
+  const d = new Date(), m = d.getHours() * 60 + d.getMinutes();
+  const top = 11, hz = H - 12, rise = H - 42;   // rise : hauteur à la fin de l'aube, au-dessus des montagnes
+  let xx, yy;
+  if (m < 435){ const k = Math.max(0, (m - 405) / 30); xx = .1 + .08 * k; yy = hz - (hz - rise) * k; }              // aube : il sort de derrière l'horizon
+  else if (m < 1065){ const k = (m - 435) / 630; xx = .18 + .64 * k; yy = rise - (rise - top) * Math.sin(Math.PI * k); }   // jour : arc dans le ciel
+  else { const k = Math.min(1, (m - 1065) / 30); xx = .82 + .08 * k; yy = rise + (hz - rise) * k; }                // crépuscule : il se couche
+  xx = W ? Math.round(W * xx) : x; yy = Math.round(yy);
+  const low = mood !== 'jour';
+  disc(ctx, xx, yy, 10, low ? '#ffb070' : '#fff2b0');
+  disc(ctx, xx, yy, 8, low ? '#ff8a3a' : '#ffe27a');
+}
+
 function homeScene(canvas, lvl, mood){
   const night = mood === 'nuit';
   const W = canvas.width, H = canvas.height, ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, W, H);
   const B = BIOMES.prairie, N = tintOf(mood), r = seeded('maison');
-  sunMoon(ctx, mood, 12, 4, H);
+  skyBand(ctx, W, H, mood);
+  sunMoon(ctx, mood, 22, 12, H, W);
   const a = 1.3;
   for (let x = 0; x < W; x++){ const y = Math.round(H - 14 - 3 * Math.sin(x / 19 + a)); px(ctx, x, y, 1, H - y, N(B.mid)); px(ctx, x, y + 3, 1, H - y, N(B.mid2)); }
   const gy = H - 8; px(ctx, 0, gy, W, H - gy, N(B.grass)); px(ctx, 0, gy, W, 1, N(B.grass2));
