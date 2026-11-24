@@ -445,6 +445,9 @@ function drawWorld(r, snap){
       ${w.fire && mood !== 'jour' ? `<div class="sc-glow" style="left:${Math.round(fx * scale)}px"></div>` : ''}
       <div class="sc-bub ${bubRight ? 'to-l' : 'to-r'}" style="bottom:${avB + Math.round(avW * .55)}px;${bubRight ? `right:${Math.round(box.clientWidth - avX + 6)}px` : `left:${Math.round(avX + avW + 6)}px`}">${esc(bubbleLine(w, n, 5, mood === 'nuit', S.name))}</div>
       <div class="sc-place">${BIOMES[w.biome].name}${w.castle ? ' · château en vue' : ''}${w.river ? ' · rivière' : ''}</div>`;
+    // La liste descend jusqu'aux montagnes : le flou coupe leur sommet, juste au-dessus de la bulle du perso
+    const bub = over.querySelector('.sc-bub');
+    if (bub) document.body.style.setProperty('--sh', Math.round(box.getBoundingClientRect().bottom - bub.getBoundingClientRect().top + 8) + 'px');
     clearInterval(drawWorld.fire);
     if (w.fire) { let t = 0; drawWorld.fire = setInterval(() => { if (!document.hidden && document.contains(cv)) drawFire(cv.getContext('2d'), fx, GH - 4, ++t); }, 450); }
   } else {
@@ -744,16 +747,16 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.2.8</div>`;
+   <div class="muted small center">Life RPG · prototype v1.2.9</div>`;
 }
 
 /* ================= Rendu et routage ================= */
 const VIEWS = {jour:viewJour, fiche:viewFiche, force:viewForce, savoir:viewSavoir, sagesse:viewSagesse, strategie:viewStrategie, vitalite:viewVitalite, reglages:viewReglages};
 const TABS = [['jour','Quêtes'],['fiche','Fiche']];
 // Petite main de curseur RPG devant l'onglet actif
-const HAND = (() => { const g = ['XXXXXXXX..','XooooooooX','XXXXXooXX.','..XoooooX.','..XoooooX.','..XXXXXX..']; let r = '';
-  g.forEach((row, y) => [...row].forEach((c, x) => { if (c !== '.') r += `<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="${c === 'X' ? '#1a1222' : '#fff7e6'}"/>`; }));
-  return `<svg class="hand" width="20" height="12" viewBox="0 0 10 6" aria-hidden="true">${r}</svg>`; })();
+const HAND = (() => { const g = ['Xo...','Xoo..','Xooo.','Xoooo','Xooo.','Xoo..','Xo...']; let r = '';   // petit curseur de menu, cuivre doré
+  g.forEach((row, y) => [...row].forEach((c, x) => { if (c !== '.') r += `<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="${c === 'X' ? '#8a5a2b' : '#d9a35a'}"/>`; }));
+  return `<svg class="hand" width="10" height="14" viewBox="0 0 5 7" aria-hidden="true">${r}</svg>`; })();
 let lastLevels = null;
 function route(){ const r = location.hash.slice(1).split('/')[0]; return VIEWS[r] ? r : 'jour'; }
 const routeArg = () => decodeURIComponent(location.hash.slice(1).split('/')[1] || '');
