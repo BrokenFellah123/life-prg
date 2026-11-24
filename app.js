@@ -413,7 +413,7 @@ const doneToday = () => S.workouts.find(w => w.date === today());
 
 /* ================= Écrans ================= */
 // Sur Quêtes et Fiche, la liste défile dans sa propre zone (85 % du haut de l'écran)
-const scroller = () => document.body.classList.contains('has-scene') ? document.getElementById('app') : (document.scrollingElement || document.documentElement);
+const scroller = () => document.body.classList.contains('has-scene') ? (document.querySelector('.fiche-scroll') || document.getElementById('app')) : (document.scrollingElement || document.documentElement);
 function dailyDone(t = today()){
   const w = S.workouts.some(x => x.date === t), rest = S.rest.includes(t);
   const pagesT = S.pages.filter(p => p.date === t).reduce((a,p) => a + p.n, 0);
@@ -450,6 +450,8 @@ function drawWorld(r, snap){
   } else {
     clearInterval(drawWorld.fire);
     const st = homeScene(cv, snap.perso, mood);
+    // La liste de la Fiche descend jusqu'au toit de la demeure (le flou fin est juste au-dessus)
+    document.body.style.setProperty('--sh', Math.round(box.clientWidth / W * (14 + HOME_H[st] + 3)) + 'px');
     over.innerHTML = `<div class="sc-place">Ta demeure : ${HOMES[st]}${st < 5 ? ` · ${HOMES[st+1].toLowerCase()} au niv. ${(st+1)*2}` : ''}</div>`;
   }
 }
@@ -557,13 +559,13 @@ function viewFiche(snap){
       <div class="grow col" style="gap:4px"><div class="row"><span class="grow name" style="font-weight:500">${s.name}</span><span class="num" style="color:var(--${s.k});font-size:19px">${l.xp} XP</span><span class="ttl" style="color:var(--${s.k})">NIV ${l.lvl}</span></div>
       ${bar(l.into/l.cost, s.k)}<div class="row muted small"><span class="grow">${s.sub}${eloV}</span><span class="num" style="font-size:17px">niv. ${l.lvl+1} : ${l.into}/${l.cost}</span></div></div></a>`;
   }).join('');
-  return `<div class="win row" style="gap:14px"><div id="hero">${avatarSVG(st, 72)}</div>
+  return `<div class="fiche-head"><div class="win row" style="gap:14px"><div id="hero">${avatarSVG(st, 72)}</div>
      <div class="grow col"><div class="ttl xl">${esc(S.name)}</div><div class="muted small">Stade ${st+1}/6 · ${STAGES[st]}</div>
      <div class="row wrap"><span class="ttl" style="white-space:nowrap">NIV. ${snap.perso} · ${tierTxt(snap.tier)}</span></div></div></div>
-   ${wardrobeWin()}
-   <div class="win"><div class="ttl" style="color:var(--accent)">ATTRIBUTS</div>${rows}</div>
+   ${wardrobeWin()}</div>
+   <div class="fiche-scroll"><div class="win"><div class="ttl" style="color:var(--accent)">ATTRIBUTS</div>${rows}</div>
    ${weekWin()}
-   <a class="btn ghost" href="#reglages" style="text-align:center;text-decoration:none">Sauvegarde et réglages</a>`;
+   <a class="btn ghost" href="#reglages" style="text-align:center;text-decoration:none">Sauvegarde et réglages</a></div>`;
 }
 
 function viewForce(snap){
@@ -741,7 +743,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.2.5</div>`;
+   <div class="muted small center">Life RPG · prototype v1.2.6</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -756,7 +758,7 @@ function render(){
   applyTheme();
   const snap = snapshot(), r = route();
   persoLvl = snap.perso;
-  document.body.classList.toggle('has-scene', r === 'jour' || r === 'fiche');
+  document.body.classList.toggle('has-scene', r === 'jour' || r === 'fiche'); document.body.dataset.route = r;
   const y = scroller().scrollTop;
   let html = VIEWS[r](snap, routeArg());
   if (!html.trimStart().startsWith('<a class="back"') && (r === 'force' || r === 'savoir')) html = `<a class="back" href="#fiche">‹ Fiche</a>` + html;

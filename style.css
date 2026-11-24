@@ -211,3 +211,9 @@ nav.tabs a.on{color:var(--accent)}
 .sc-bub.to-r::before{left:-9px;border-right-color:#f6e7cc}
 .sc-bub.to-l::after{right:-9px;border-left-color:#f6e7cc}
 .sc-bub{max-width:150px}
+
+/* Fiche : le perso et la garde-robe restent en haut, seuls Attributs, Cette semaine et Sauvegarde défilent */
+body[data-route=fiche] #app{overflow:hidden;display:flex;flex-direction:column;-webkit-mask-image:none;mask-image:none;padding-bottom:0}
+.fiche-head{flex:0 1 auto;max-height:62%;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+.fiche-scroll{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;display:flex;flex-direction:column;gap:14px;padding-bottom:18px;
+  -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 8px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 8px),transparent)}

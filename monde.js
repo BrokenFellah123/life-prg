@@ -133,6 +133,7 @@ function landscape(canvas, dateStr, mood, lift = 0){
 // ---------- Demeure (onglet Fiche) : cabane → château, une amélioration tous les 2 niveaux ----------
 const HOMES = ['Cabane', 'Chalet', 'Maison de pierre', 'Manoir', 'Tour fortifiée', 'Château'];
 const homeStage = lvl => Math.min(5, Math.floor(lvl / 2));
+const HOME_H = [16, 21, 25, 28, 38, 56];   // hauteur de chaque demeure (pixels du dessin)
 
 function drawHome(ctx, cx, gy, st, night, N){
   const wood = N('#9a6234'), woodD = N('#6e4220'), roof = N('#b8432e'), roofD = N('#8a2e20'), stone = N('#a7a3a0'), stoneD = N('#7c7874'), stoneL = N('#c9c5c0');
