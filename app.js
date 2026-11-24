@@ -631,6 +631,8 @@ function weekWin(){
 const CABANE = [   // objets déblocables, par niveau perso. Ajouter ici les prochains.
   {k:'lit', name:'Lit', lvl:1, desc:'Pour noter tes heures de sommeil chaque jour.'},
 ];
+// Objets réellement posés : il faut l'avoir ajouté ET avoir encore le niveau (si le niveau redescend, l'objet se reverrouille)
+const cabItems = lvl => Object.fromEntries(CABANE.filter(o => (S.cabane || {})[o.k] && lvl >= o.lvl).map(o => [o.k, true]));
 const hFmt = v => String(Math.round(v*100)/100).replace('.', ',');
 function sleepWin(){
   const t = today(), Z = S.sommeil || {}, v = Z[t];
@@ -643,11 +645,11 @@ function sleepWin(){
    <div class="win flat log">${days.map(d => `<div><span class="d">${shortDate(d)}</span><span class="grow">${Z[d] > 0 ? hFmt(Z[d]) + ' h' : '<span class="muted">—</span>'}</span>${Z[d] > 0 ? `<span class="xp" style="min-width:${Math.round(Math.min(12, Z[d]) * 7)}px;height:8px;background:var(--sag);display:inline-block;border-radius:0"></span>` : ''}</div>`).join('')}</div>`;
 }
 function viewCabane(snap){
-  const lvl = snap.perso, C = S.cabane || {};
+  const lvl = snap.perso, C = cabItems(lvl);
   const items = CABANE.map(o => {
     const placed = !!C[o.k], open = lvl >= o.lvl;
     return `<div class="row" style="padding:6px 0">${placed ? '<span class="ttl" style="color:var(--vit)">✓</span>' : open ? '<span class="ttl" style="color:var(--accent)">★</span>' : '<span class="ttl muted">🔒</span>'}
-      <div class="grow col"><span class="name">${o.name}</span><span class="muted small">${placed ? 'Posé dans ta cabane. ' : open ? 'Débloqué ! ' : `Se débloque au niveau ${o.lvl}. `}${o.desc}</span></div>
+      <div class="grow col"><span class="name">${o.name}</span><span class="muted small">${placed ? 'Posé dans ta cabane. ' : open ? 'Débloqué ! ' : `Se débloque au niveau ${o.lvl}. ${(S.cabane || {})[o.k] ? 'Il reviendra tout seul, avec ton historique, quand tu repasseras niveau ' + o.lvl + '. ' : ''}`}${o.desc}</span></div>
       ${placed ? '' : open ? `<button class="btn sm pri" data-act="cabAdd" data-k="${o.k}">+ Ajouter</button>` : `<span class="muted small">Niv. ${o.lvl}</span>`}</div>`; }).join('');
   const nb = CABANE.filter(o => C[o.k]).length;
   return `<a class="back" href="#fiche">‹ Fiche</a>
@@ -877,7 +879,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.7</div>`;
+   <div class="muted small center">Life RPG · prototype v1.7.1</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -906,7 +908,7 @@ function render(){
   document.documentElement.classList.toggle('locked', cut > 0 || r === 'jour' || r === 'fiche');
   document.getElementById('app').innerHTML = html;
   drawWorld(r, snap);
-  if (r === 'cabane'){ const cv = document.getElementById('cabcv'); if (cv && typeof cabinInterior === 'function') cabinInterior(cv, S.cabane || {}, skyMood()); }
+  if (r === 'cabane'){ const cv = document.getElementById('cabcv'); if (cv && typeof cabinInterior === 'function') cabinInterior(cv, cabItems(snap.perso), skyMood()); }
   const parent = {force:'fiche', savoir:'fiche', sagesse:'fiche', strategie:'fiche', vitalite:'fiche', reglages:'fiche', cabane:'fiche'}[r] || r;
   document.getElementById('tabs').innerHTML = TABS.map(([k,l]) => `<a href="#${k}" class="${k===parent?'on':''}">${k===parent?HAND:''}${l}</a>`).join('');
   if (render.keepScroll) scroller().scrollTop = y; render.keepScroll = false;
@@ -1079,7 +1081,7 @@ document.addEventListener('change', e => {
   else if (k === 'kg'){ const c = ensureCur(); c.ex[el.dataset.id].kg = isNaN(num) ? null : num; }
   else if (k === 'load'){ if (isNaN(num)) delete S.loads[el.dataset.id]; else S.loads[el.dataset.id] = num;
     if (S.cur && S.cur.ex[el.dataset.id] && !S.cur.ex[el.dataset.id].sets.some(x => x)) S.cur.ex[el.dataset.id].kg = isNaN(num) ? null : num; }
-  else if (k === 'sommeil'){ S.sommeil = S.sommeil || {}; if (num > 0 && num <= 24) S.sommeil[today()] = Math.round(num*4)/4; else { delete S.sommeil[today()]; if (String(el.value).trim()) toast('Entre un nombre d\'heures, ex. 7,5'); } }
+  else if (k === 'sommeil'){ if (!cabItems(persoLvl).lit) return; S.sommeil = S.sommeil || {}; if (num > 0 && num <= 24) S.sommeil[today()] = Math.round(num*4)/4; else { delete S.sommeil[today()]; if (String(el.value).trim()) toast('Entre un nombre d\'heures, ex. 7,5'); } }
   else if (k === 'poids'){ S.poids = S.poids || {}; if (num > 0 && num < 400) S.poids[today()] = Math.round(num*10)/10; else delete S.poids[today()]; }
   else if (k === 'name'){ S.name = el.value.trim() || 'Boss'; }
   else if (k === 'import'){
