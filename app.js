@@ -19,7 +19,8 @@ const RULES = {
   kcal: 40,            // XP si le seuil de kcal est atteint
   absenceRetour: 3,    // jours d'absence avant la quête « Retour » (XP du jour ×2)
   objectifPages: 10,
-  queteDemain: 20,     // XP d'une quête du lendemain réussie
+  queteDemain: 20,
+  proteine: 10,       // boisson protéinée après la séance     // XP d'une quête du lendemain réussie
 };
 
 const STATS = [
@@ -47,8 +48,24 @@ const PROGRAM = {
     ['thp','Tirage horizontal poulie',3,8], ['elp','Élévations latérales poulie',3,8], ['shh','Shrugs haltères',3,8],
     ['cup','Curl poulie',3,8], ['tbf','Triceps barre au front',3,8], ['rdd','Roulés de doigts',3,8]]},
 };
-const CYCLE = ['A','L','B','L'];   // Haut A, Bas, Haut B, Bas
-const EXN = {}; for (const t in PROGRAM) for (const e of PROGRAM[t].ex) EXN[e[0]] = e;
+// Ancien programme (v0.1-1.3) : gardé seulement pour lire l'historique
+const LEGACY = {A:'Haut A', L:'Bas', B:'Haut B'};
+// v1.4 : 4 séances que Boss compose lui-même. Exercice : [id, nom, séries, reps (ou secondes), type de charge]
+const SESS = [['HA','Haut du corps A'], ['HB','Haut du corps B'], ['BA','Bas du corps A'], ['BB','Bas du corps B']];
+const CYCLE = ['HA','BA','HB','BB'];   // ordre proposé
+const progOf = t => (S.prog && S.prog[t]) || {ex:[]};
+const sessName = t => (SESS.find(x => x[0] === t) || [])[1] || LEGACY[t] || 'Séance';
+function exDef(id){
+  for (const t in S.prog || {}) { const e = S.prog[t].ex.find(e => e[0] === id); if (e) return e; }
+  for (const t in PROGRAM) { const e = PROGRAM[t].ex.find(e => e[0] === id); if (e) return e; }
+  return null;
+}
+function knownExercises(){   // tous les noms d'exercices connus (pour retrouver l'historique d'un même exercice)
+  const m = new Map();
+  for (const t in PROGRAM) for (const e of PROGRAM[t].ex) m.set(e[1].toLowerCase(), e);
+  for (const t in S.prog || {}) for (const e of S.prog[t].ex) m.set(e[1].toLowerCase(), e);
+  return m;
+}
 
 /* ================= Dates (toujours en heure locale) ================= */
 const pad = n => String(n).padStart(2,'0');
@@ -99,9 +116,16 @@ function load(){
 function migrate(){
   // v0.6 : plus d'augmentation automatique. Les charges prévues redeviennent la dernière charge réellement saisie.
   if (S.mig06) return;
-  for (const id in EXN){ const last = lastOf(id); if (last) S.loads[id] = last.kg; }
+  for (const t in PROGRAM) for (const [id] of PROGRAM[t].ex){ const last = lastOf(id); if (last) S.loads[id] = last.kg; }
   if (S.cur && !Object.values(S.cur.ex).some(e => e.sets.some(x => x))) for (const id in S.cur.ex) S.cur.ex[id].kg = S.loads[id] ?? null;
   S.mig06 = true; save();
+}
+function migrate14(){
+  // v1.4 : séances personnalisées. Une séance en cours de l'ancien programme est reprise si des séries sont cochées.
+  if (S.mig14) return;
+  S.prog = S.prog || {HA:{ex:[]}, HB:{ex:[]}, BA:{ex:[]}, BB:{ex:[]}};
+  if (S.cur && LEGACY[S.cur.type] && !Object.values(S.cur.ex).some(e => e.sets.some(x => x))) S.cur = null;
+  S.mig14 = true; save();
 }
 function save(){ localStorage.setItem(KEY, JSON.stringify(S)); }
 
@@ -141,12 +165,13 @@ function computeEvents(){
   const ws = [...S.workouts].sort((a,b) => a.date.localeCompare(b.date));
   const perWeek = {}, best = {};
   for (const w of ws){
-    push(w.date, 'for', RULES.seance, `Séance ${PROGRAM[w.type].name}`);
+    push(w.date, 'for', RULES.seance, `Séance ${sessName(w.type)}`);
+    if (w.prot) push(w.date, 'for', RULES.proteine, 'Boisson protéinée après la séance');
     const wk = weekKey(w.date); perWeek[wk] = (perWeek[wk]||0) + 1;
     if (perWeek[wk] === 4) push(w.date, 'for', RULES.semaine4, 'Bonus semaine : 4 séances');
     for (const id in w.ex){
-      const e = w.ex[id], def = EXN[id];
-      if (!def || def[4] === 'sec' || !allSuccess(e)) continue;
+      const e = w.ex[id], def = exDef(id);
+      if (!def || def[4] === 'sec' || def[4] === 'simple' || !allSuccess(e)) continue;
       // La première fois qu'un exercice est réussi, on fixe la référence (pas de bonus) :
       // sinon la séance test donnerait un record par exercice.
       if (best[id] === undefined) best[id] = e.kg;
@@ -374,9 +399,10 @@ function journal(k, snap, n=12){
 }
 
 /* ================= Séance ================= */
-function nextPos(){
+function nextType(){
   const ws = [...S.workouts].sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
-  return ws.length ? (ws[ws.length-1].pos + 1) % CYCLE.length : 0;
+  const last = ws.length ? ws[ws.length-1].type : null, i = CYCLE.indexOf(last);
+  return i === -1 ? CYCLE[0] : CYCLE[(i + 1) % CYCLE.length];
 }
 function lastOf(id){
   for (let i = S.workouts.length-1; i >= 0; i--) if (S.workouts[i].ex[id]) return S.workouts[i].ex[id];
@@ -384,32 +410,34 @@ function lastOf(id){
 }
 function ensureCur(){
   if (S.cur) return S.cur;
-  const pos = nextPos(); const type = CYCLE[pos];
-  S.cur = {date: today(), pos, type, ex:{}, run:[false,false]};
-  for (const [id,,sets] of PROGRAM[type].ex) S.cur.ex[id] = {kg: S.loads[id] ?? null, sets: Array(sets).fill(0)};
+  const type = nextType();
+  S.cur = {date: today(), type, ex:{}, run:[false,false]};
+  for (const [id,,sets] of progOf(type).ex) S.cur.ex[id] = {kg: S.loads[id] ?? null, sets: Array(sets).fill(0)};
   return S.cur;
 }
 function setCurType(type){
-  const pos = CYCLE.indexOf(type) === -1 ? 0 : (type === 'L' ? (nextPos() === 3 ? 3 : 1) : CYCLE.indexOf(type));
-  S.cur = null; ensureCur(); S.cur.type = type; S.cur.pos = pos; S.cur.ex = {};
-  for (const [id,,sets] of PROGRAM[type].ex) S.cur.ex[id] = {kg: S.loads[id] ?? null, sets: Array(sets).fill(0)};
+  S.cur = {date: today(), type, ex:{}, run:[false,false]};
+  for (const [id,,sets] of progOf(type).ex) S.cur.ex[id] = {kg: S.loads[id] ?? null, sets: Array(sets).fill(0)};
 }
 function finishSession(){
   const c = S.cur; if (!c) return;
   const ex = {};
   for (const id in c.ex){ const e = c.ex[id]; if (e.sets.some(x => x)) ex[id] = {kg: Number(e.kg)||0, sets: e.sets}; }
   if (!Object.keys(ex).length){ toast('Valide au moins un exercice'); return; }
-  const w = {id: uid(), date: c.date, type: c.type, pos: c.pos, ex, run: c.run};
+  const w = {id: uid(), date: c.date, type: c.type, ex, run: c.run, prot: !!c.prot};
   S.workouts.push(w);
-  for (const id in ex){
-    const def = EXN[id];
-    S.loads[id] = ex[id].kg;   // la prochaine séance reprend la dernière charge saisie
-  }
+  for (const id in ex) S.loads[id] = ex[id].kg;   // la prochaine séance reprend la dernière charge saisie
   S.rest = S.rest.filter(d => d !== c.date);
   S.cur = null;
   return w;
 }
 const doneToday = () => S.workouts.find(w => w.date === today());
+// Petite gourde en cuir, pixel art
+const FLASK = (() => { const g = ['..XXX..','..XcX..','..XXX..','.XoooX.','XoohooX','XoohooX','XooooOX','XoooOOX','.XXXXX.'];
+  const col = {X:'#1a1222', c:'#d9a35a', o:'#9a6234', h:'#c98a4a', O:'#6e4220'}; let r = '';
+  g.forEach((row, y) => [...row].forEach((ch, x) => { if (col[ch]) r += `<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="${col[ch]}"/>`; }));
+  return `<svg width="21" height="27" viewBox="0 0 7 9" style="shape-rendering:crispEdges;flex:0 0 auto" aria-hidden="true">${r}</svg>`; })();
+const protRow = on => `<div class="row">${check(on, 'prot')}${FLASK}<span class="grow">Boisson protéinée après la séance</span><span class="xp">+${RULES.proteine}</span></div>`;
 
 /* ================= Écrans ================= */
 // Sur Quêtes et Fiche, la liste défile dans sa propre zone (85 % du haut de l'écran)
@@ -465,7 +493,7 @@ setInterval(() => { if (document.hidden) return; if (skyMood() !== worldMood) re
 function viewJour(snap){
   const t = today();
   const w = doneToday(), rest = S.rest.includes(t);
-  const type = S.cur && S.cur.date === t ? S.cur.type : CYCLE[nextPos()];
+  const type = S.cur && S.cur.date === t ? S.cur.type : nextType();
   const pagesT = S.pages.filter(p => p.date === t).reduce((a,p) => a + p.n, 0);
   const puzT = S.puzzles.filter(p => p.date === t).length;
   const kc = S.kcal[t] || '';
@@ -482,10 +510,10 @@ function viewJour(snap){
   const retour = retourToday() ? `<div class="banner">★ QUÊTE RETOUR ★<br>Bon retour ! Toute l'XP gagnée aujourd'hui compte double.</div>` : '';
 
   const qSeance = w
-    ? q('for', true, `Séance ${PROGRAM[w.type].name}`, 'Terminée', `+${RULES.seance}`)
+    ? q('for', true, `Séance ${sessName(w.type)}`, 'Terminée', `+${RULES.seance}`)
     : rest
       ? q('for', true, 'Repos prévu', 'La récupération fait partie du programme.', '', `<div><button class="btn sm ghost" data-act="unrest">Annuler le repos</button></div>`)
-      : q('for', false, `Séance ${PROGRAM[type].name}`, `${PROGRAM[type].ex.length} exercices · 10 min de course avant et après`, `+${RULES.seance}`,
+      : q('for', false, `Séance ${sessName(type)}`, progOf(type).ex.length ? `${progOf(type).ex.length} exercice${progOf(type).ex.length > 1 ? 's' : ''}` : 'Séance à composer : ajoute tes exercices', `+${RULES.seance}`,
           `<div class="row wrap"><a class="btn sm pri" href="#force">Ouvrir la séance</a><button class="btn sm ghost" data-act="rest">Repos prévu</button></div>`);
 
   const qRev = q('sav', pomo >= 2, '2 × 25 min de révision', `${pomo} × 25 min aujourd'hui · +${RULES.pomo} XP par bloc, + les étapes de cours`, `+${2*RULES.pomo}`, pomoRow(pomo));
@@ -582,45 +610,56 @@ function viewForce(snap){
   const w = doneToday();
   let sess;
   if (w && !S.cur){
-    sess = `<div class="sec">Séance du jour · ${PROGRAM[w.type].name}</div><div class="win flat">
-      <div class="ttl" style="color:var(--vit)">SÉANCE TERMINÉE · +${RULES.seance} XP</div>
-      ${Object.entries(w.ex).map(([id,e]) => `<div class="row small"><span class="grow">${esc(EXN[id][1])}</span><span class="num">${EXN[id][4]==='sec'?'':kgTxt(e.kg)+' kg'} ${e.sets.map(x=>x===1?'■':x===2?'×':'□').join('')}</span></div>`).join('')}
+    sess = `<div class="sec">Séance du jour · ${sessName(w.type)}</div><div class="win flat">
+      <div class="ttl" style="color:var(--vit)">SÉANCE TERMINÉE · +${RULES.seance + (w.prot ? RULES.proteine : 0)} XP</div>
+      ${Object.entries(w.ex).map(([id,e]) => `<div class="row small"><span class="grow">${esc((exDef(id) || [, '?'])[1])}</span><span class="num">${(exDef(id) || [])[4]==='simple' ? '✓ fait' : ((exDef(id) || [])[4]==='sec'?'':kgTxt(e.kg)+' kg')+' '+e.sets.map(x=>x===1?'■':x===2?'×':'□').join('')}</span></div>`).join('')}
+      ${protRow(!!w.prot)}
       <button class="btn sm ghost" data-act="undoWorkout">Annuler cette séance</button></div>`;
   } else {
-    const c = S.cur || {type: CYCLE[nextPos()], date:t, ex:null, run:[false,false]};
-    const exs = PROGRAM[c.type].ex.map(([id,name,n,reps,kind]) => {
-      const e = c.ex ? c.ex[id] : {kg: S.loads[id] ?? null, sets: Array(n).fill(0)};
+    const c = S.cur || {type: nextType(), date:t, ex:null, run:[false,false]};
+    const P = progOf(c.type);
+    const exs = P.ex.map(([id,name,n,reps,kind]) => {
+      const e = (c.ex && c.ex[id]) || {kg: S.loads[id] ?? null, sets: Array(n).fill(0)};
       const last = lastOf(id);
       let hint = '';
-      if (last && kind !== 'sec') hint = `<span class="muted small">Dernière fois : ${kgTxt(last.kg)} kg${allSuccess(last) ? ', tout réussi' : ', pas tout réussi'}</span>`;
+      if (kind === 'simple') hint = '';
+      else if (last && kind !== 'sec') hint = `<span class="muted small">Dernière fois : ${kgTxt(last.kg)} kg${allSuccess(last) ? ', tout réussi' : ', pas tout réussi'}</span>`;
       else if (kind !== 'sec' && e.kg == null) hint = `<span class="muted small">Première fois : note la charge utilisée</span>`;
       const unit = kind === 'sec' ? `${reps} s` : `× ${reps}`;
-      const kgIn = kind === 'sec' ? '' : `<input class="kg" type="number" inputmode="decimal" step="0.5" min="0" placeholder="${kind==='lest'?'lest':'kg'}" value="${e.kg ?? ''}" data-in="kg" data-id="${id}"><span class="muted">kg</span>`;
-      return `<div class="ex"><div class="row"><span class="grow name">${esc(name)}</span>${kgIn}</div>
+      const kgIn = kind === 'sec' || kind === 'simple' ? '' : `<input class="kg" type="number" inputmode="decimal" step="0.5" min="0" placeholder="${kind==='lest'?'lest':'kg'}" value="${e.kg ?? ''}" data-in="kg" data-id="${id}"><span class="muted">kg</span>`;
+      return `<div class="ex has-x"><button class="xdel" data-act="exRemove" data-id="${id}" data-t="${c.type}" aria-label="Retirer">✕</button><div class="row"><span class="grow name">${esc(name)}</span>${kgIn}</div>
         <div class="row">${(() => { const st = e.sets.every(x => x === 1) ? 'ok' : e.sets.some(x => x === 2) ? 'ko' : '';
+          if (kind === 'simple') return `<button class="btn grow ${st==='ok'?'pri':''}" data-act="exOk" data-id="${id}">${st==='ok' ? '✓ Fait' : 'Valider'}</button>`;
           return `<button class="btn grow ${st==='ok'?'pri':''}" data-act="exOk" data-id="${id}">${st==='ok' ? '✓ ' : ''}${n} ${unit} ${st==='ok' ? 'validé' : '· valider'}</button>
           <button class="btn sm ${st==='ko'?'danger':'ghost'}" data-act="exKo" data-id="${id}">${st==='ko' ? 'Raté ✓' : 'Raté'}</button>`; })()}</div>
         ${hint}</div>`;
     }).join('');
-    const types = ['A','L','B'].map(k => `<button class="btn sm ${k===c.type?'pri':''}" data-act="type" data-t="${k}">${PROGRAM[k].name}</button>`).join('');
-    sess = `<div class="sec">Séance du jour · ${PROGRAM[c.type].name}${c.date !== t ? ` (commencée le ${shortDate(c.date)})` : ''}</div>
-     <div class="seg">${types}</div>
+    const types = SESS.map(([k,n]) => `<button class="btn sm ${k===c.type?'pri':''}" data-act="type" data-t="${k}">${n}</button>`).join('');
+    const names = [...knownExercises().values()].map(e => `<option value="${esc(e[1])}">`).join('');
+    const addEx = `<div class="win flat col"><div class="ttl" style="font-size:9px;color:var(--accent)">AJOUTER UN EXERCICE À « ${esc(sessName(c.type)).toUpperCase()} »</div>
+      <input placeholder="Nom de l'exercice" data-in="exname" list="exnames" maxlength="60"><datalist id="exnames">${names}</datalist>
+      <div class="row"><input class="mid" type="number" inputmode="numeric" min="1" max="10" value="3" data-in="exsets"><span class="muted">séries</span>
+        <input class="mid" type="number" inputmode="numeric" min="1" max="300" value="8" data-in="exreps"><span class="muted">reps</span></div>
+      <div class="row"><select class="sel" data-in="exkind"><option value="">Charge en kg</option><option value="lest">Lest (poids du corps + kg)</option><option value="sec">Durée (les « reps » sont des secondes)</option><option value="simple">Simple : juste à valider (ex. course)</option></select></div>
+      <button class="btn pri" data-act="exAdd" data-t="${c.type}">Ajouter l'exercice</button>
+      <div class="muted small">L'exercice reste dans cette séance pour les prochaines fois. Même nom qu'un exercice déjà fait = son historique et sa dernière charge sont repris.</div></div>`;
+    sess = `<div class="sec">Séance du jour · ${sessName(c.type)}${c.date !== t ? ` (commencée le ${shortDate(c.date)})` : ''}</div>
+     <div class="seg2">${types}</div>
      <div class="win flat">
-      <div class="row">${check(c.run[0],'run','data-i="0"')}<span class="grow">10 min de course (échauffement)</span></div>
       <div class="muted small">La charge reprend ta dernière saisie : change-la si tu veux augmenter. « Valider » = toutes les séries réussies. « Raté » = fait, mais pas toutes les reps (ne compte pas pour un record).</div>
-      ${exs}
-      <div class="row">${check(c.run[1],'run','data-i="1"')}<span class="grow">10 min de course (retour au calme)</span></div>
-      <button class="btn pri" data-act="finish">Terminer la séance · +${RULES.seance} XP</button>
+      ${exs || `<div class="muted">Séance vide. Ajoute tes exercices juste en dessous : ils resteront dans « ${esc(sessName(c.type))} ».</div>`}
+      ${protRow(!!c.prot)}
+      <button class="btn pri" data-act="finish">Terminer la séance · +${RULES.seance + (c.prot ? RULES.proteine : 0)} XP</button>
       ${S.cur ? `<button class="btn sm ghost" data-act="abandon">Effacer la séance en cours</button>` : ''}
-     </div>`;
+     </div>${addEx}`;
   }
   return `${statHead('for', snap)}${av}${sess}
    <details><summary>Mes charges</summary><div class="win flat">${chargesTable()}</div></details>
    <div class="sec">Journal Force</div><div class="win flat">${journal('for', snap)}</div>`;
 }
 function chargesTable(){
-  return ['A','L','B'].map(t => `<div class="ttl" style="font-size:9px;color:var(--accent)">${PROGRAM[t].name}</div>` +
-    PROGRAM[t].ex.filter(e => e[4] !== 'sec').map(([id,name]) => `<div class="row" style="padding:4px 0"><span class="grow small">${esc(name)}</span>
+  return SESS.map(([t]) => `<div class="ttl" style="font-size:9px;color:var(--accent)">${sessName(t)}</div>` +
+    (progOf(t).ex.filter(e => !['sec','simple'].includes(e[4])).length ? '' : '<div class="muted small">Aucun exercice avec charge.</div>') + progOf(t).ex.filter(e => !['sec','simple'].includes(e[4])).map(([id,name]) => `<div class="row" style="padding:4px 0"><span class="grow small">${esc(name)}</span>
       <input class="kg" type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" value="${S.loads[id] ?? ''}" data-in="load" data-id="${id}"></div>`).join('')).join('') +
     `<div class="muted small">Charge proposée à la prochaine séance. Elle se met à jour toute seule après chaque séance.</div>`;
 }
@@ -741,13 +780,13 @@ function viewReglages(){
    <div class="win flat col"><div class="qt">Nom du personnage</div><input value="${esc(S.name)}" data-in="name"></div>
    <div class="win flat col"><div class="qt">Règles actuelles</div><div class="muted small">
      Niveau n d'une stat : 100 × n XP. Niveau perso : somme des niveaux Force, Savoir, Sagesse, Stratégie ÷ 4.<br>
-     Force : ${RULES.seance} XP/séance (charges gérées par toi, préremplies avec la dernière saisie), +${RULES.semaine4} à la 4e séance de la semaine, +${RULES.record} par record (charge plus lourde avec toutes les séries réussies).<br>
+     Force : ${RULES.seance} XP/séance (+${RULES.proteine} avec la boisson protéinée) (charges gérées par toi, préremplies avec la dernière saisie), +${RULES.semaine4} à la 4e séance de la semaine, +${RULES.record} par record (charge plus lourde avec toutes les séries réussies).<br>
      Savoir : ${RULES.pomo} XP par 25 min de révision, ${RULES.etapeCours} XP par étape de cours (lu, appris, quiz, maîtrisé), +${RULES.examen} par examen. Sagesse : ${RULES.page} XP/page, +${RULES.livre} par livre.<br>
      Stratégie : ${RULES.puzzles} XP par série de 10 puzzles. Ravitaillement : pas d'XP ; rang = moyenne de tes notes C/B/A/S sur 30 jours (jours sans note ignorés), lettre la plus proche. Il change l'allure du personnage.<br>
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.3.2</div>`;
+   <div class="muted small center">Life RPG · prototype v1.4</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -874,13 +913,33 @@ const ACTS = {
   exKo(el){ const e = ensureCur().ex[el.dataset.id]; const on = e.sets.some(x => x === 2); e.sets = e.sets.map((x,i) => on ? 0 : (i === e.sets.length-1 ? 2 : 1)); },
   run(el){ const c = ensureCur(); c.run[+el.dataset.i] = !c.run[+el.dataset.i]; },
   type(el){ const c = S.cur; if (c && Object.values(c.ex).some(e => e.sets.some(x => x)) && !sure(el, 'Changer de séance efface les séries cochées. Continuer ?', 'Oui, changer')) return; setCurType(el.dataset.t); },
-  finish(){ ensureCur(); const w = finishSession(); if (w) { toast(`Séance terminée ! +${RULES.seance} XP`); scroller().scrollTop = 0; } },
+  finish(){ ensureCur(); const w = finishSession(); if (w) { toast(`Séance terminée ! +${RULES.seance + (w.prot ? RULES.proteine : 0)} XP`); scroller().scrollTop = 0; } },
+  prot(){ const w = doneToday(); if (w && !S.cur){ w.prot = !w.prot; if (w.prot) toast(`+${RULES.proteine} XP Force`); } else { const c = ensureCur(); c.prot = !c.prot; } },
+  exAdd(el){
+    const t = el.dataset.t, name = val('exname'); if (!name) return toast("Nom de l'exercice ?");
+    const kind = val('exkind') || undefined, simple = kind === 'simple';
+    const sets = simple ? 1 : Math.max(1, Math.min(10, parseInt(val('exsets')) || 3)), reps = simple ? 0 : Math.max(1, Math.min(300, parseInt(val('exreps')) || 8));
+    S.prog = S.prog || {}; const P = S.prog[t] = S.prog[t] || {ex:[]};
+    const known = knownExercises().get(name.toLowerCase());
+    const id = known ? known[0] : 'x' + uid();
+    if (P.ex.some(e => e[0] === id)) return toast('Déjà dans cette séance');
+    const def = [id, known ? known[1] : name, sets, reps]; if (kind) def.push(kind);
+    P.ex.push(def);
+    if (S.cur && S.cur.type === t) S.cur.ex[id] = {kg: S.loads[id] ?? (lastOf(id) || {}).kg ?? null, sets: Array(sets).fill(0)};
+    toast(known ? `${def[1]} ajouté · historique repris` : `${def[1]} ajouté à ${sessName(t)}`);
+  },
+  exRemove(el){
+    const t = el.dataset.t, id = el.dataset.id, P = progOf(t), e = P.ex.find(e => e[0] === id); if (!e) return;
+    if (!sure(el, `Retirer « ${e[1]} » de la séance ${sessName(t)} ? Ton historique et tes records sont gardés.`, 'Oui, retirer')) return;
+    P.ex = P.ex.filter(x => x !== e);
+    if (S.cur && S.cur.type === t) delete S.cur.ex[id];
+  },
   abandon(el){ if (sure(el, 'Effacer la séance en cours ?', 'Oui, effacer')) S.cur = null; },
   undoWorkout(el){
     const w = doneToday(); if (!w || !sure(el, 'Annuler la séance du jour ? Tu pourras la refaire.', 'Oui, annuler')) return;
     S.workouts = S.workouts.filter(x => x !== w);
-    S.cur = {date:w.date, pos:w.pos, type:w.type, run:w.run, ex:{}};
-    for (const [id,,n] of PROGRAM[w.type].ex) S.cur.ex[id] = w.ex[id] ? {kg:w.ex[id].kg, sets:[...w.ex[id].sets]} : {kg:S.loads[id] ?? null, sets:Array(n).fill(0)};
+    S.cur = {date:w.date, type:w.type, run:w.run, prot:!!w.prot, ex:{}};
+    for (const [id,,n] of progOf(w.type).ex) S.cur.ex[id] = w.ex[id] ? {kg:w.ex[id].kg, sets:[...w.ex[id].sets]} : {kg:S.loads[id] ?? null, sets:Array(n).fill(0)};
     for (const id in w.ex) S.loads[id] = w.ex[id].kg;
   },
   export(){
@@ -926,7 +985,7 @@ document.addEventListener('change', e => {
   else if (k === 'name'){ S.name = el.value.trim() || 'Boss'; }
   else if (k === 'import'){
     const f = el.files[0]; if (!f) return;
-    f.text().then(txt => { try { const d = JSON.parse(txt); if (!d || d.v !== 1) throw 0; S = Object.assign(blank(), d); S.mig06 = false; migrate(); lastLevels = null; commit(); toast('Sauvegarde importée'); } catch { toast('Fichier invalide'); } });
+    f.text().then(txt => { try { const d = JSON.parse(txt); if (!d || d.v !== 1) throw 0; S = Object.assign(blank(), d); S.mig06 = false; migrate(); S.mig14 = false; migrate14(); lastLevels = null; commit(); toast('Sauvegarde importée'); } catch { toast('Fichier invalide'); } });
     return;
   }
   else return;   // champs de saisie libre (nom de cours…) : lus au clic sur le bouton
@@ -951,5 +1010,5 @@ setInterval(() => {
   el.innerHTML = avatarSVG(st, 72, S.outfit, pose, tr); el.classList.add(hop);
   setTimeout(() => { el.classList.remove(hop); if (document.getElementById('hero') === el) el.innerHTML = avatarSVG(st, 72); }, 900);
 }, 20000);
-load(); migrate(); render();
+load(); migrate(); migrate14(); render();
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js', {updateViaCache:'none'});

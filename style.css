@@ -249,3 +249,6 @@ nav.tabs::after{content:"";position:absolute;left:0;right:0;top:100%;height:120p
 /* Pages d'attribut : même principe, en-tête fixe et contenu qui défile jusqu'aux onglets */
 body.paned{position:fixed;inset:0;min-height:0}
 body.paned:not(.has-scene) #app{position:fixed;top:0;left:0;right:0;height:calc(100vh - var(--nav,53px));height:calc(100dvh - var(--nav,53px));overflow:hidden;display:flex;flex-direction:column;padding-bottom:0}
+.seg2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.seg2 .btn{box-shadow:none}
+select.sel{min-width:0;max-width:100%}
