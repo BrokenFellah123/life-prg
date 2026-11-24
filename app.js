@@ -553,6 +553,8 @@ function bubNow(){ return bubText && bubDay === today() ? bubText : (bubNow.ctx 
 // Recale la liste au-dessus de la bulle et place la zone touchable sur la bulle
 function placeBubble(){
   const box = document.getElementById('scene'), bub = box && box.querySelector('.sc-bub'), hit = document.querySelector('.bub-hit');
+  const av = box && box.querySelector('.sc-av'), ah = document.querySelector('.av-hit');
+  if (av && ah){ const a = av.getBoundingClientRect(); Object.assign(ah.style, {left: Math.round(a.left - 8) + 'px', top: Math.round(a.top - 8) + 'px', width: Math.round(a.width + 16) + 'px', height: Math.round(a.height + 12) + 'px'}); }
   if (!bub) return;
   const b = bub.getBoundingClientRect();
   document.body.style.setProperty('--sh', Math.round(box.getBoundingClientRect().bottom - b.top + 8) + 'px');
@@ -676,7 +678,7 @@ function viewJour(snap){
    ${fold('main', `QUÊTES PRINCIPALES${mqCount('main')}`, mqList('main'))}
    ${fold('side', `QUÊTES SECONDAIRES${mqCount('side')}`, mqList('side'))}
    ${weekWin()}</div></div>
-   <button class="bub-hit" aria-label="Changer la phrase du personnage"></button>`;
+   <button class="bub-hit" aria-label="Changer la phrase du personnage"></button><button class="av-hit" aria-label="Faire bouger le personnage"></button>`;
 }
 // Section repliable (toucher le titre ouvre / ferme), état mémorisé
 function fold(id, title, body){
@@ -967,7 +969,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.9</div>`;
+   <div class="muted small center">Life RPG · prototype v1.9.1</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -1196,13 +1198,17 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) rend
 
 /* Petite animation de l'avatar sur la Fiche, toutes les ~20 s (pouce, clin d'œil, biceps) */
 let poseI = 0;
-setInterval(() => {
-  const el = document.getElementById('hero'); if (!el || document.hidden) return;
+// Joue une pose (pouce, clin d'œil, biceps ; bâillement en C-tier) avec un petit saut, puis revient à la normale
+function animAvatar(el, size){
+  if (!el || el.classList.contains('anim')) return;
   const st = stageOf(snapshot().lv.for.lvl), tr = curTier();
   const seq = tr === 'C' ? ['yawn', 'thumb', 'yawn'] : ['thumb', 'wink', 'flex'];   // C : fatigué, il bâille
   const pose = seq[poseI++ % 3], hop = tr === 'C' ? 'hop-soft' : tr === 'S' ? 'hop-big' : 'hop';
-  el.innerHTML = avatarSVG(st, 72, S.outfit, pose, tr); el.classList.add(hop);
-  setTimeout(() => { el.classList.remove(hop); if (document.getElementById('hero') === el) el.innerHTML = avatarSVG(st, 72); }, 900);
-}, 20000);
+  el.innerHTML = avatarSVG(st, size, S.outfit, pose, tr); el.classList.add(hop, 'anim');
+  setTimeout(() => { el.classList.remove(hop, 'anim'); if (document.contains(el)) el.innerHTML = avatarSVG(st, size); }, 900);
+}
+setInterval(() => { if (!document.hidden) animAvatar(document.getElementById('hero'), 72); }, 20000);
+// Toucher le perso du paysage (Quêtes) : il fait une petite animation
+document.addEventListener('click', e => { if (e.target.closest('.av-hit')) { e.stopPropagation(); e.preventDefault(); animAvatar(document.querySelector('#scene .sc-av'), 44); } }, true);
 load(); migrate(); migrate14(); fixCur(); render();
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js', {updateViaCache:'none'});

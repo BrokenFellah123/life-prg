@@ -131,17 +131,17 @@ a.btn{text-decoration:none;display:inline-flex;align-items:center;justify-conten
 .toast{white-space:normal;max-width:92vw;text-align:center;line-height:1.6}
 select.sel{flex:1;background:var(--track);border:2px solid var(--line);border-radius:0;min-height:44px;padding:8px;font-size:16px;font-family:var(--fb);color:var(--ink)}
 
-#hero.hop{animation:hop .9s steps(6) 1}
+#hero.hop,.sc-av.hop{animation:hop .9s steps(6) 1}
 @keyframes hop{0%,100%{transform:translateY(0)}25%{transform:translateY(-4px)}50%{transform:translateY(0)}70%{transform:translateY(-2px)}}
-#hero.hop-big{animation:hopbig .9s steps(6) 1}
+#hero.hop-big,.sc-av.hop-big{animation:hopbig .9s steps(6) 1}
 @keyframes hopbig{0%,100%{transform:translateY(0)}25%{transform:translateY(-7px)}50%{transform:translateY(0)}70%{transform:translateY(-4px)}}
-#hero.hop-soft{animation:hopsoft .9s steps(4) 1}
+#hero.hop-soft,.sc-av.hop-soft{animation:hopsoft .9s steps(4) 1}
 @keyframes hopsoft{0%,100%{transform:translateY(0)}50%{transform:translateY(1px)}}
 .spk{opacity:0;animation:spk 4s steps(1) infinite}
 @keyframes spk{0%{opacity:0}8%{opacity:1}16%{opacity:.4}24%,100%{opacity:0}}
 .btn.grade{min-width:56px}
 .emo{display:inline-flex;align-items:center;line-height:1;vertical-align:middle;margin-left:.15em}
-@media (prefers-reduced-motion:reduce){#hero.hop,#hero.hop-big,#hero.hop-soft{animation:none}.spk{animation:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){#hero.hop,#hero.hop-big,#hero.hop-soft,.sc-av.hop-soft{animation:none}.spk{animation:none;opacity:1}}
 details.fold>summary.ttl{font-size:10px;color:var(--accent);padding:2px 0}
 details.fold:not([open]){padding-top:10px;padding-bottom:10px}
 
@@ -262,5 +262,6 @@ body:not([data-route=fiche]) .cab-hit{display:none}
 
 /* ===== v1.9 : bulle du perso touchable ===== */
 .bub-hit{position:fixed;z-index:3;display:block;background:transparent;border:0;padding:0;margin:0;-webkit-tap-highlight-color:transparent;cursor:pointer}
-body:not([data-route=jour]) .bub-hit{display:none}
+body:not([data-route=jour]) .bub-hit,body:not([data-route=jour]) .av-hit{display:none}
+.av-hit{position:fixed;z-index:3;display:block;background:transparent;border:0;padding:0;margin:0;-webkit-tap-highlight-color:transparent;cursor:pointer}
 .bub-hit:active{background:rgba(255,215,140,.15)}
