@@ -218,8 +218,8 @@ body.has-scene{position:fixed;inset:0;min-height:0}
 body.has-scene #app{overflow:hidden;display:flex;flex-direction:column;-webkit-mask-image:none;mask-image:none;padding-bottom:0}
 .pane-head{flex:0 1 auto;max-height:62%;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
 .pane-scroll{flex:1;min-height:0;overflow-y:scroll;-webkit-overflow-scrolling:touch;
-  -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 8px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 8px),transparent)}
-.pane-inner{min-height:calc(100% + 1px);display:flex;flex-direction:column;gap:14px;padding-bottom:18px}
+  -webkit-mask-image:linear-gradient(to bottom,transparent,#000 8px,#000 calc(100% - 8px),transparent);mask-image:linear-gradient(to bottom,transparent,#000 8px,#000 calc(100% - 8px),transparent)}
+.pane-inner{min-height:calc(100% + 1px);display:flex;flex-direction:column;gap:14px;padding:8px 0 18px}
 
 /* Onglet actif : bois plus clair, liseré allumé, petite main */
 nav.tabs a{gap:8px;align-items:center;border-radius:0;margin:0 2px}
