@@ -12,8 +12,11 @@ button:active{transform:translateY(3px);box-shadow:0 0 0 2px #d9a35a,0 2px 0 2px
 a{color:#d9a35a}
 </style></head><body>
 <h1>Sons de la cabane</h1>
-<p>Un seul son, simple : une vieille porte en bois qui grince en s'ouvrant, façon console 16 bits. Mets le son de l'iPhone (pas en silencieux).</p>
-<button data-v="A">▶ Vieille porte qui s'ouvre<small>Grincement court, rien d'autre</small></button>
+<p>Une vieille porte en bois qui grince en s'ouvrant, façon console 16 bits. Seul le grincement change. Mets le son de l'iPhone (pas en silencieux).</p>
+<button data-v="A">▶ Son 1 · Court<small>Grincement bref, environ 0,6 s</small></button>
+<button data-v="B">▶ Son 2 · Long et grave<small>La lourde porte s'ouvre lentement, environ 1,4 s</small></button>
+<button data-v="C">▶ Son 3 · Aigu<small>Gond plus sec et plus aigu, environ 0,9 s</small></button>
+<p>Dis-moi ton numéro préféré.</p>
 <a href="./#fiche">‹ Retour à l'appli</a>
 <script src="sons.js"></script>
 <script>document.querySelectorAll('button').forEach(b => b.addEventListener('click', () => playSound(SOUNDS.pixel.cabane[b.dataset.v])));</script>

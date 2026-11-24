@@ -49,12 +49,12 @@ const bell = (f, t = 0, d = 1.2, v = 0.12) => { [1, 2.01, 3.02].forEach((m, i) =
 
 // Grincement de porte : frottement « accroche-glisse » du gond = train d'impulsions dont la cadence varie,
 // chaque impulsion fait résonner le bois. Puis rendu façon console 16 bits (échantillonnage réduit, quantification).
-function creak(){
-  const c = ac(), sr = c.sampleRate, D = 0.95, n = Math.ceil(sr * D), buf = c.createBuffer(1, n, sr), out = buf.getChannelData(0);
-  const res = [[620, 0.9, 0.0045], [1180, 0.5, 0.003], [2350, 0.22, 0.0018]];   // résonances du bois : fréquence, poids, amortissement
+function creak({D = 0.95, r0 = 38, r1 = 70, k = 1, wob = 12} = {}){
+  const c = ac(), sr = c.sampleRate, n = Math.ceil(sr * D), buf = c.createBuffer(1, n, sr), out = buf.getChannelData(0);
+  const res = [[620*k, 0.9, 0.0045/k], [1180*k, 0.5, 0.003/k], [2350*k, 0.22, 0.0018/k]];   // résonances du bois : fréquence, poids, amortissement
   let phase = 0, seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  const rate = x => 38 + 70 * Math.sin(Math.PI * Math.min(1, x / 0.75)) ** 0.8 + 12 * Math.sin(x * 9);   // cadence : monte puis retombe
-  const env = x => Math.min(1, x / 0.08) * Math.max(0, Math.min(1, (D - x) / 0.25));
+  const rate = x => r0 + r1 * Math.sin(Math.PI * Math.min(1, x / (D * 0.8))) ** 0.8 + wob * Math.sin(x * 9);   // cadence : monte puis retombe
+  const env = x => Math.min(1, x / 0.08) * Math.max(0, Math.min(1, (D - x) / (D * 0.26)));
   const pulses = [];
   for (let k = 0; k < n; k++){ const x = k / sr; phase += rate(x) / sr; if (phase >= 1){ phase -= 1; pulses.push([k, env(x) * (0.75 + 0.25 * rnd())]); } }
   for (const [k0, a] of pulses) for (const [f, w, tau] of res){
@@ -87,6 +87,10 @@ const SOUNDS = {
       B: () => { tone({f:200, f2:1600, type:'square', d:0.35, v:0.08}); [2093, 2637, 3136].forEach((f, i) => tone({f, type:'triangle', t:0.38 + i*0.07, d:0.25, v:0.1})); },
     },
     // Entrée dans la cabane : grincement d'une vieille porte en bois, rendu 16 bits
-    cabane: { A: () => creak() },
+    cabane: {
+      A: () => creak({D:0.6, r0:45, r1:75}),                     // court
+      B: () => creak({D:1.4, r0:22, r1:40, k:0.7, wob:8}),       // long et grave
+      C: () => creak({D:0.9, r0:60, r1:110, k:1.6, wob:18}),     // aigu
+    },
   },
 };
