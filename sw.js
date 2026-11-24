@@ -1,6 +1,6 @@
 /* Mises à jour immédiates : on demande toujours la dernière version au réseau,
    et on se rabat sur le cache seulement hors ligne. */
-const VERSION = 'liferpg-1.8.0';
+const VERSION = 'liferpg-1.8.1';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'sons.js', 'sons/porte1.mp3', 'manifest.webmanifest',
   'fonts/pressstart2p.woff2', 'fonts/vt323.woff2','fonts/pixelify.ttf','monde.js', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 self.addEventListener('install', e => {

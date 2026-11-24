@@ -20,6 +20,8 @@ const RULES = {
   kcal: 40,            // XP si le seuil de kcal est atteint
   absenceRetour: 3,    // jours d'absence avant la quête « Retour » (XP du jour ×2)
   objectifPages: 20,
+  sommeilBon: 7,       // heures de sommeil pour être « bien reposé »
+  repos: 10,           // XP par quête quotidienne validée un jour bien reposé
   queteDemain: 20,
   proteine: 10,
   course: 5,         // course avant / après la séance (chacune)
@@ -191,6 +193,15 @@ function levelOf(xp){
 }
 function allSuccess(e){ return e.sets.length > 0 && e.sets.every(x => x === 1); }
 
+// Attributs des quêtes quotidiennes validées un jour donné (Ravitaillement exclu : il ne gagne pas d'XP)
+function dailyStatsOn(d){
+  const out = [];
+  if (S.workouts.some(w => w.date === d)) out.push('for');
+  if ((S.pomo[d] || 0) >= 2) out.push('sav');
+  if (S.pages.filter(p => p.date === d).reduce((a,p) => a + p.n, 0) >= RULES.objectifPages) out.push('sag');
+  if (S.puzzles.filter(p => p.date === d).length >= RULES.objectifPuzzles) out.push('str');
+  return out;
+}
 function computeEvents(){
   const ev = [];   // {date, stat, xp, label}
   const push = (date, stat, xp, label) => ev.push({date, stat, xp, label});
@@ -230,6 +241,14 @@ function computeEvents(){
   // Stratégie
   for (const p of S.puzzles) push(p.date, 'str', RULES.puzzles, '10 puzzles');
 
+  // Bien reposé (lit de la cabane) : nuit de 7 h ou plus → +10 XP par quête quotidienne validée ce jour-là, sur son attribut.
+  // Pas de malus en dessous. Actif seulement si le lit est posé et débloqué (niveau calculé sans ce bonus).
+  {
+    const tot = {for:0, sav:0, sag:0, str:0}; ev.forEach(e => { if (e.stat in tot) tot[e.stat] += e.xp; });
+    const base = Math.floor(['for','sav','sag','str'].reduce((a,k) => a + levelOf(tot[k]).lvl, 0) / 4);
+    if (cabItems(base).lit) for (const d in S.sommeil || {}) if (S.sommeil[d] >= RULES.sommeilBon)
+      for (const st of dailyStatsOn(d)) push(d, st, RULES.repos, `Bien reposé (${hFmt(S.sommeil[d])} h) · quête ${STATS.find(x => x.k === st).name}`);
+  }
   // Quête « Retour » : après 3 jours sans aucune action, l'XP du premier jour de reprise est doublée.
   const days = [...activeDays()].sort();
   for (let i = 1; i < days.length; i++){
@@ -557,6 +576,9 @@ function viewJour(snap){
   const qPerso = tq ? `<div class="quest ${tq.done?'dn':''}">${check(!!tq.done,'tqDone',`data-id="${tq.id}"`)}<div class="grow col">
      <div class="row"><span class="grow qt name">${esc(tq.text)}</span><span class="xp">+${RULES.queteDemain}</span></div>
      <div class="row"><span class="chip" style="background:var(--${tq.stat})">${STATS.find(x=>x.k===tq.stat).abbr}</span><span class="muted small">${tq.at ? `Écrite hier à ${new Date(tq.at).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})}` : 'Ta quête, écrite hier'}</span></div></div></div>` : '';
+  const zz = (S.sommeil || {})[t], lit = cabItems(snap.perso).lit;
+  const repos = lit && zz >= RULES.sommeilBon ? `<div class="banner" style="font-size:9px">☾ BIEN REPOSÉ · ${hFmt(zz)} h ☾<br>+${RULES.repos} XP par quête quotidienne validée aujourd'hui</div>`
+    : lit && zz == null ? `<div class="muted small center"><a class="link" href="#cabane">Note ta nuit dans la cabane</a> : ${RULES.sommeilBon} h ou plus = +${RULES.repos} XP par quête quotidienne</div>` : '';
   const retour = retourToday() ? `<div class="banner">★ QUÊTE RETOUR ★<br>Bon retour ! Toute l'XP gagnée aujourd'hui compte double.</div>` : '';
 
   const qSeance = w
@@ -584,7 +606,7 @@ function viewJour(snap){
   return `<div class="pane-head"><div class="row"><div class="grow"><div class="ttl big">Quêtes</div><div class="muted">${longDate(t)}</div></div>
      <div class="center"><div class="num big" style="color:var(--accent)">+${snap.todayXP} XP</div><div class="muted small">aujourd'hui</div></div></div></div>
    <div class="pane-scroll"><div class="pane-inner">
-   ${retour}
+   ${retour}${repos}
    ${fold('daily', `QUÊTES QUOTIDIENNES · ${nDone}/5`, `${qSeance}${qRev}${qLect}${qPuz}${qKcal}`)}
    ${fold('demain', `QUÊTE DU LENDEMAIN${tq ? ` · ${tq.done ? 1 : 0}/1` : ''}`, `${qPerso}${tomorrowWin()}`)}
    ${fold('main', `QUÊTES PRINCIPALES${mqCount('main')}`, mqList('main'))}
@@ -642,8 +664,8 @@ function sleepWin(){
   return `<div class="sec">Sommeil</div>
    <div class="win"><div class="qt">Nuit dernière</div>
      <div class="row"><input class="mid" type="text" inputmode="decimal" placeholder="ex. 7,5" value="${v != null ? hFmt(v) : ''}" data-in="sommeil"><span class="muted">heures</span></div>
-     <div class="muted small">${avg != null ? `Moyenne sur 7 jours : ${hFmt(Math.round(avg*10)/10)} h (${w7.length} nuit${w7.length>1?'s':''} notée${w7.length>1?'s':''})` : 'Note tes heures en chiffres, avec les demies : 7,5 = 7 h 30. Pour le suivi, sans XP.'}</div></div>
-   <div class="win flat log">${days.map(d => `<div><span class="d">${shortDate(d)}</span><span class="grow">${Z[d] > 0 ? hFmt(Z[d]) + ' h' : '<span class="muted">—</span>'}</span>${Z[d] > 0 ? `<span class="xp" style="min-width:${Math.round(Math.min(12, Z[d]) * 7)}px;height:8px;background:var(--sag);display:inline-block;border-radius:0"></span>` : ''}</div>`).join('')}</div>`;
+     <div class="muted small">${avg != null ? `Moyenne sur 7 jours : ${hFmt(Math.round(avg*10)/10)} h (${w7.length} nuit${w7.length>1?'s':''} notée${w7.length>1?'s':''})` : 'Note tes heures en chiffres, avec les demies : 7,5 = 7 h 30.'}<br>${v >= RULES.sommeilBon ? `☾ Bien reposé : +${RULES.repos} XP par quête quotidienne validée aujourd'hui.` : `${RULES.sommeilBon} h ou plus = bien reposé : +${RULES.repos} XP par quête quotidienne validée ce jour-là. Moins : rien ne change.`}</div></div>
+   <div class="win flat log">${days.map(d => `<div><span class="d">${shortDate(d)}</span><span class="grow">${Z[d] > 0 ? hFmt(Z[d]) + ' h' + (Z[d] >= RULES.sommeilBon ? ' ☾' : '') : '<span class="muted">—</span>'}</span>${Z[d] > 0 ? `<span class="xp" style="min-width:${Math.round(Math.min(12, Z[d]) * 7)}px;height:8px;background:var(--sag);display:inline-block;border-radius:0"></span>` : ''}</div>`).join('')}</div>`;
 }
 function viewCabane(snap){
   const lvl = snap.perso, C = cabItems(lvl);
@@ -880,7 +902,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.8</div>`;
+   <div class="muted small center">Life RPG · prototype v1.8.1</div>`;
 }
 
 /* ================= Rendu et routage ================= */
