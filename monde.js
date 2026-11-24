@@ -80,7 +80,7 @@ function landscape(canvas, dateStr, mood, lift = 0){
   const w = dayWorld(dateStr), r = w.r, B = BIOMES[w.biome];
   const N = tintOf(mood);
   skyBand(ctx, W, H, mood);
-  sunMoon(ctx, mood, Math.round(W * .84), 8, H, W);
+  sunMoon(ctx, mood, Math.round(W * .84), 8, H, W, 2/3);   // pixels 3× ici contre 2× sur la Fiche
   // montagnes au loin
   const far = N(B.far), snow = N('#f4f7ff');
   let peaks = []; const np = 3 + Math.floor(r() * 3);
@@ -176,8 +176,8 @@ function skyBand(ctx, W, H, mood){
 }
 function disc(ctx, cx, cy, rad, c){ for (let dy = -rad; dy <= rad; dy++){ const w = Math.round(Math.sqrt(rad*rad - dy*dy)); px(ctx, cx - w, cy + dy, 2*w + 1, 1, c); } }
 // Soleil (ou lune) en second plan : dessiné avant le paysage, donc derrière les montagnes
-function sunMoon(ctx, mood, x, y, H, W){
-  if (mood === 'nuit'){ disc(ctx, x, y + 1, 5, '#f4f1d8'); disc(ctx, x + 3, y - 1, 4, SKY.nuit[0]); return; }
+function sunMoon(ctx, mood, x, y, H, W, k = 1){   // k : facteur de taille (même taille à l'écran sur les deux onglets)
+  if (mood === 'nuit'){ disc(ctx, x, y + 1, Math.round(5 * k), '#f4f1d8'); disc(ctx, x + Math.round(3 * k), y - 1, Math.round(4 * k), SKY.nuit[0]); return; }
   // Le soleil suit l'heure : il sort de derrière les collines à 6h45, monte jusqu'à midi et demi, redescend et disparaît à 18h15
   const d = new Date(), m = d.getHours() * 60 + d.getMinutes();
   const top = 7, hz = H - 9, rise = H - 27;   // rise : hauteur à la fin de l'aube, au-dessus des montagnes
@@ -187,8 +187,8 @@ function sunMoon(ctx, mood, x, y, H, W){
   else { const k = Math.min(1, (m - 1065) / 30); xx = .82 + .08 * k; yy = rise + (hz - rise) * k; }                // crépuscule : il se couche
   xx = W ? Math.round(W * xx) : x; yy = Math.round(yy);
   const low = mood !== 'jour';
-  disc(ctx, xx, yy, 8, low ? '#ffb070' : '#fff2b0');
-  disc(ctx, xx, yy, 6, low ? '#ff8a3a' : '#ffe27a');
+  disc(ctx, xx, yy, Math.round(8 * k), low ? '#ffb070' : '#fff2b0');
+  disc(ctx, xx, yy, Math.round(6 * k), low ? '#ff8a3a' : '#ffe27a');
 }
 
 function homeScene(canvas, lvl, mood){
