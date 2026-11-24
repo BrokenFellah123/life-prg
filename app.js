@@ -879,7 +879,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.7.1</div>`;
+   <div class="muted small center">Life RPG · prototype v1.7.6</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -923,7 +923,7 @@ function render(){
 }
 function commit(){ save(); render.keepScroll = true; render(); }
 /* ---- Sons choisis (voir sons.js) ---- */
-const SOUND_PICK = {pixel: {quete:'A', onglet:'B', attribut:'B', niveau:'B'}};
+const SOUND_PICK = {pixel: {quete:'A', onglet:'B', attribut:'B', niveau:'B', cabane:'A'}};
 function play(action){
   if (S.sound === false || typeof SOUNDS === 'undefined') return;
   try { const t = theme(); playSound(SOUNDS[t][action][SOUND_PICK[t][action]]); } catch {}
@@ -938,6 +938,7 @@ function feedback(before){
 document.addEventListener('click', e => {
   if (e.target.closest('nav.tabs a')) play('onglet');
   else if (e.target.closest('a.stat-link')) play('attribut');
+  else if (e.target.closest('a.cab-hit')) play('cabane');
 }, true);
 let toastT;
 function toast(msg, cls='', ms=2200){

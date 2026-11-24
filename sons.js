@@ -49,6 +49,12 @@ const bell = (f, t = 0, d = 1.2, v = 0.12) => { [1, 2.01, 3.02].forEach((m, i) =
 
 // Sons enregistrés (fichiers courts) : décodés une fois, puis rejoués
 const SAMPLES = {};
+function preloadSample(url){
+  if (SAMPLES[url] || preloadSample[url]) return; preloadSample[url] = 1;
+  fetch(url).then(r => r.arrayBuffer()).then(a => new Promise((ok, ko) => ac().decodeAudioData(a, ok, ko))).then(b => { SAMPLES[url] = b; }).catch(() => { preloadSample[url] = 0; });
+}
+// Préchargé au premier toucher, pour que la porte sonne tout de suite
+document.addEventListener('pointerdown', () => preloadSample('sons/porte1.mp3'), {once:true, passive:true});
 function sample(url, v = 0.8){
   const c = ac();
   const go = b => { const s = c.createBufferSource(), g = c.createGain(); s.buffer = b; g.gain.value = v; s.connect(g).connect(c.destination); s.start(); };
