@@ -47,25 +47,13 @@ function noise({t = 0, d = 0.05, v = 0.3, ft = 'bandpass', f = 1000, f2 = null, 
 }
 const bell = (f, t = 0, d = 1.2, v = 0.12) => { [1, 2.01, 3.02].forEach((m, i) => tone({f: f*m, t, d: d/(i+1), v: v/(i+1), a: 0.003})); };
 
-// Grincement de porte : frottement « accroche-glisse » du gond = train d'impulsions dont la cadence varie,
-// chaque impulsion fait résonner le bois. Puis rendu façon console 16 bits (échantillonnage réduit, quantification).
-function creak({D = 0.95, r0 = 38, r1 = 70, k = 1, wob = 12} = {}){
-  const c = ac(), sr = c.sampleRate, n = Math.ceil(sr * D), buf = c.createBuffer(1, n, sr), out = buf.getChannelData(0);
-  const res = [[620*k, 0.9, 0.0045/k], [1180*k, 0.5, 0.003/k], [2350*k, 0.22, 0.0018/k]];   // résonances du bois : fréquence, poids, amortissement
-  let phase = 0, seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  const rate = x => r0 + r1 * Math.sin(Math.PI * Math.min(1, x / (D * 0.8))) ** 0.8 + wob * Math.sin(x * 9);   // cadence : monte puis retombe
-  const env = x => Math.min(1, x / 0.08) * Math.max(0, Math.min(1, (D - x) / (D * 0.26)));
-  const pulses = [];
-  for (let k = 0; k < n; k++){ const x = k / sr; phase += rate(x) / sr; if (phase >= 1){ phase -= 1; pulses.push([k, env(x) * (0.75 + 0.25 * rnd())]); } }
-  for (const [k0, a] of pulses) for (const [f, w, tau] of res){
-    const len = Math.min(n - k0, Math.ceil(sr * tau * 6));
-    for (let k = 0; k < len; k++){ const t = k / sr; out[k0 + k] += a * w * Math.exp(-t / tau) * Math.sin(2 * Math.PI * f * t); }
-  }
-  // 16 bits façon console : 16 kHz « tenu », 7 bits de profondeur, puis lissage
-  const hold = Math.max(1, Math.round(sr / 16000)), q = 64; let last = 0, lp = 0;
-  for (let k = 0; k < n; k++){ if (k % hold === 0) last = Math.round(Math.max(-1, Math.min(1, out[k] * 0.55)) * q) / q; lp += (last - lp) * 0.55; out[k] = lp; }
-  const src = c.createBufferSource(), g = c.createGain(); src.buffer = buf; g.gain.value = 0.6;
-  src.connect(g).connect(c.destination); src.start();
+// Sons enregistrés (fichiers courts) : décodés une fois, puis rejoués
+const SAMPLES = {};
+function sample(url, v = 0.8){
+  const c = ac();
+  const go = b => { const s = c.createBufferSource(), g = c.createGain(); s.buffer = b; g.gain.value = v; s.connect(g).connect(c.destination); s.start(); };
+  if (SAMPLES[url]) return go(SAMPLES[url]);
+  fetch(url).then(r => r.arrayBuffer()).then(a => new Promise((ok, ko) => c.decodeAudioData(a, ok, ko))).then(b => { SAMPLES[url] = b; go(b); }).catch(() => {});
 }
 
 const SOUNDS = {
@@ -87,10 +75,11 @@ const SOUNDS = {
       B: () => { tone({f:200, f2:1600, type:'square', d:0.35, v:0.08}); [2093, 2637, 3136].forEach((f, i) => tone({f, type:'triangle', t:0.38 + i*0.07, d:0.25, v:0.1})); },
     },
     // Entrée dans la cabane : grincement d'une vieille porte en bois, rendu 16 bits
+    // Entrée dans la cabane : vraies portes en bois (Kenney, RPG Audio, CC0), rendu 16 bits léger
     cabane: {
-      A: () => creak({D:0.6, r0:45, r1:75}),                     // court
-      B: () => creak({D:1.4, r0:22, r1:40, k:0.7, wob:8}),       // long et grave
-      C: () => creak({D:0.9, r0:60, r1:110, k:1.6, wob:18}),     // aigu
+      A: () => sample('sons/porte1.mp3'),
+      B: () => sample('sons/porte2.mp3'),
+      C: () => sample('sons/porte3.mp3'),
     },
   },
 };
