@@ -413,7 +413,7 @@ const doneToday = () => S.workouts.find(w => w.date === today());
 
 /* ================= Écrans ================= */
 // Sur Quêtes et Fiche, la liste défile dans sa propre zone (85 % du haut de l'écran)
-const scroller = () => document.body.classList.contains('has-scene') ? (document.querySelector('.fiche-scroll') || document.getElementById('app')) : (document.scrollingElement || document.documentElement);
+const scroller = () => document.body.classList.contains('has-scene') ? (document.querySelector('.pane-scroll') || document.getElementById('app')) : (document.scrollingElement || document.documentElement);
 function dailyDone(t = today()){
   const w = S.workouts.some(x => x.date === t), rest = S.rest.includes(t);
   const pagesT = S.pages.filter(p => p.date === t).reduce((a,p) => a + p.n, 0);
@@ -500,14 +500,15 @@ function viewJour(snap){
      `${gradeRow(t)}<div class="row"><input class="mid" type="number" inputmode="numeric" min="0" step="50" placeholder="total" value="${kc}" data-in="kcal"><span class="muted">kcal</span></div>`);
 
   const nDone = [!!(w || rest), pomo >= 2, pagesT >= RULES.objectifPages, puzT >= 1, !!gT].filter(Boolean).length;
-  return `<div class="row"><div class="grow"><div class="ttl big">Quêtes</div><div class="muted">${longDate(t)}</div></div>
-     <div class="center"><div class="num big" style="color:var(--accent)">+${snap.todayXP} XP</div><div class="muted small">aujourd'hui</div></div></div>
+  return `<div class="pane-head"><div class="row"><div class="grow"><div class="ttl big">Quêtes</div><div class="muted">${longDate(t)}</div></div>
+     <div class="center"><div class="num big" style="color:var(--accent)">+${snap.todayXP} XP</div><div class="muted small">aujourd'hui</div></div></div></div>
+   <div class="pane-scroll"><div class="pane-inner">
    ${retour}
    ${fold('daily', `QUÊTES QUOTIDIENNES · ${nDone}/5`, `${qSeance}${qRev}${qLect}${qPuz}${qKcal}`)}
    ${fold('demain', `QUÊTE DU LENDEMAIN${tq ? ` · ${tq.done ? 1 : 0}/1` : ''}`, `${qPerso}${tomorrowWin()}`)}
    ${fold('main', `QUÊTES PRINCIPALES${mqCount('main')}`, mqList('main'))}
    ${fold('side', `QUÊTES SECONDAIRES${mqCount('side')}`, mqList('side'))}
-   ${weekWin()}`;
+   ${weekWin()}</div></div>`;
 }
 // Section repliable (toucher le titre ouvre / ferme), état mémorisé
 function fold(id, title, body){
@@ -559,13 +560,13 @@ function viewFiche(snap){
       <div class="grow col" style="gap:4px"><div class="row"><span class="grow name" style="font-weight:500">${s.name}</span><span class="num" style="color:var(--${s.k});font-size:19px">${l.xp} XP</span><span class="ttl" style="color:var(--${s.k})">NIV ${l.lvl}</span></div>
       ${bar(l.into/l.cost, s.k)}<div class="row muted small"><span class="grow">${s.sub}${eloV}</span><span class="num" style="font-size:17px">niv. ${l.lvl+1} : ${l.into}/${l.cost}</span></div></div></a>`;
   }).join('');
-  return `<div class="fiche-head"><div class="win row" style="gap:14px"><div id="hero">${avatarSVG(st, 72)}</div>
+  return `<div class="pane-head"><div class="win row" style="gap:14px"><div id="hero">${avatarSVG(st, 72)}</div>
      <div class="grow col"><div class="ttl xl">${esc(S.name)}</div><div class="muted small">Stade ${st+1}/6 · ${STAGES[st]}</div>
      <div class="row wrap"><span class="ttl" style="white-space:nowrap">NIV. ${snap.perso} · ${tierTxt(snap.tier)}</span></div></div></div>
    ${wardrobeWin()}</div>
-   <div class="fiche-scroll"><div class="win"><div class="ttl" style="color:var(--accent)">ATTRIBUTS</div>${rows}</div>
+   <div class="pane-scroll"><div class="pane-inner"><div class="win"><div class="ttl" style="color:var(--accent)">ATTRIBUTS</div>${rows}</div>
    ${weekWin()}
-   <a class="btn ghost" href="#reglages" style="text-align:center;text-decoration:none">Sauvegarde et réglages</a></div>`;
+   <a class="btn ghost" href="#reglages" style="text-align:center;text-decoration:none">Sauvegarde et réglages</a></div></div>`;
 }
 
 function viewForce(snap){
@@ -743,7 +744,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.2.6</div>`;
+   <div class="muted small center">Life RPG · prototype v1.2.7</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -759,6 +760,7 @@ function render(){
   const snap = snapshot(), r = route();
   persoLvl = snap.perso;
   document.body.classList.toggle('has-scene', r === 'jour' || r === 'fiche'); document.body.dataset.route = r;
+  document.documentElement.classList.toggle('locked', r === 'jour' || r === 'fiche');
   const y = scroller().scrollTop;
   let html = VIEWS[r](snap, routeArg());
   if (!html.trimStart().startsWith('<a class="back"') && (r === 'force' || r === 'savoir')) html = `<a class="back" href="#fiche">‹ Fiche</a>` + html;
