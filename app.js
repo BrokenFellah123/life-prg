@@ -623,7 +623,6 @@ function viewFiche(snap){
      <div class="row wrap"><span class="ttl" style="white-space:nowrap">NIV. ${snap.perso} · ${tierTxt(snap.tier)}</span></div></div></div>
    ${wardrobeWin()}</div>
    <div class="pane-scroll"><div class="pane-inner"><div class="win"><div class="ttl" style="color:var(--accent)">ATTRIBUTS</div>${rows}</div>
-   ${weekWin()}
    <a class="btn ghost" href="#reglages" style="text-align:center;text-decoration:none">Sauvegarde et réglages</a></div></div>`;
 }
 
@@ -826,7 +825,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.5</div>`;
+   <div class="muted small center">Life RPG · prototype v1.5.1</div>`;
 }
 
 /* ================= Rendu et routage ================= */
