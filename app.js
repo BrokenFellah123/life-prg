@@ -14,11 +14,12 @@ const RULES = {
   examen: 200,         // bonus par examen réussi
   page: 1,             // XP par page lue
   livre: 100,          // bonus par livre fini
-  puzzles: 5,          // XP par série de 10 puzzles (à affiner)
+  puzzles: 10,         // XP par série de 10 puzzles
+  objectifPuzzles: 2,  // séries de 10 pour valider la quête quotidienne (20 puzzles)
   kcalSeuil: 3500,
   kcal: 40,            // XP si le seuil de kcal est atteint
   absenceRetour: 3,    // jours d'absence avant la quête « Retour » (XP du jour ×2)
-  objectifPages: 10,
+  objectifPages: 20,
   queteDemain: 20,
   proteine: 10,
   course: 5,         // course avant / après la séance (chacune)
@@ -489,7 +490,7 @@ const scroller = () => document.querySelector('.pane-scroll') || document.scroll
 function dailyDone(t = today()){
   const w = S.workouts.some(x => x.date === t), rest = S.rest.includes(t);
   const pagesT = S.pages.filter(p => p.date === t).reduce((a,p) => a + p.n, 0);
-  return [w || rest, (S.pomo[t] || 0) >= 2, pagesT >= RULES.objectifPages, S.puzzles.some(p => p.date === t), !!(S.grade || {})[t]].filter(Boolean).length;
+  return [w || rest, (S.pomo[t] || 0) >= 2, pagesT >= RULES.objectifPages, S.puzzles.filter(p => p.date === t).length >= RULES.objectifPuzzles, !!(S.grade || {})[t]].filter(Boolean).length;
 }
 /* ---- Le monde : ciel, paysage du jour (Quêtes), demeure (Fiche) ---- */
 let worldMood = null;
@@ -572,14 +573,14 @@ function viewJour(snap){
      book ? `<div class="row wrap"><button class="btn sm" data-act="pages" data-n="10">+10 pages</button><input class="mid" type="number" inputmode="numeric" min="1" placeholder="autre" data-in="pagesq"><button class="btn sm" data-act="pagesq">OK</button></div>`
           : `<div><a class="btn sm" href="#sagesse">Ajouter un livre</a></div>`);
 
-  const qPuz = q('str', puzT >= 1, '10 puzzles d\'échecs', `${puzT*10} puzzles aujourd'hui`, `+${RULES.puzzles}`,
-     `<div class="row wrap"><button class="btn sm" data-act="puz">+ 1 série de 10</button>${puzT ? `<button class="btn sm ghost" data-act="unpuz">− annuler</button>` : ''}</div>`);
+  const qPuz = q('str', puzT >= RULES.objectifPuzzles, `${RULES.objectifPuzzles*10} puzzles d'échecs`, `${puzT*10} puzzles aujourd'hui · +${RULES.puzzles} XP par série de 10`, `+${RULES.objectifPuzzles*RULES.puzzles}`,
+     `<div class="row wrap">${Array.from({length:RULES.objectifPuzzles}, (_,i) => check(puzT >= i+1, 'puzN', `data-n="${i+1}"`)).join('')}<button class="btn sm" data-act="puz">+10 puzzles</button>${puzT > RULES.objectifPuzzles ? `<button class="btn sm ghost" data-act="unpuz">−</button>` : ''}</div>`);
 
   const gT = (S.grade || {})[t];
   const qKcal = q('vit', !!gT, 'Ravitaillement', `Note la qualité de ce que tu as mangé · rang actuel : ${tierTxt(snap.tier)}`, gT ? `${gT} ${emo(gT)}` : '',
      `${gradeRow(t)}<div class="row"><input class="mid" type="number" inputmode="numeric" min="0" step="50" placeholder="total" value="${kc}" data-in="kcal"><span class="muted">kcal</span></div>`);
 
-  const nDone = [!!(w || rest), pomo >= 2, pagesT >= RULES.objectifPages, puzT >= 1, !!gT].filter(Boolean).length;
+  const nDone = [!!(w || rest), pomo >= 2, pagesT >= RULES.objectifPages, puzT >= RULES.objectifPuzzles, !!gT].filter(Boolean).length;
   return `<div class="pane-head"><div class="row"><div class="grow"><div class="ttl big">Quêtes</div><div class="muted">${longDate(t)}</div></div>
      <div class="center"><div class="num big" style="color:var(--accent)">+${snap.todayXP} XP</div><div class="muted small">aujourd'hui</div></div></div></div>
    <div class="pane-scroll"><div class="pane-inner">
@@ -879,7 +880,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.7.10</div>`;
+   <div class="muted small center">Life RPG · prototype v1.8</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -987,6 +988,10 @@ const ACTS = {
   unfinishBook(el){ S.books.find(b => b.id === el.dataset.id).done = null; },
   puz(){ S.puzzles.push({id:uid(), date:today()}); toast(`+${RULES.puzzles} XP Stratégie`); },
   puzY(){ S.puzzles.push({id:uid(), date:addDays(today(),-1)}); toast('Ajouté à hier'); },
+  puzN(el){ const n = +el.dataset.n, t = today(), c = S.puzzles.filter(p => p.date === t).length, want = c >= n ? n-1 : n;
+    for (let k = c; k < want; k++) S.puzzles.push({id:uid(), date:t});
+    for (let k = c; k > want; k--){ const i = S.puzzles.map(p => p.date).lastIndexOf(t); if (i >= 0) S.puzzles.splice(i, 1); }
+    if (want > c) toast(`+${(want-c)*RULES.puzzles} XP Stratégie`); },
   unpuz(){ const i = S.puzzles.map(p => p.date).lastIndexOf(today()); if (i >= 0) S.puzzles.splice(i, 1); },
   elo(){ const v = parseInt(val('elo')); if (!(v > 0)) return toast('Elo ?'); const t = today(); S.elo = S.elo.filter(e => e.date !== t); S.elo.push({date:t, v}); },
   addCourse(el){ const name = val('cname'); if (!name) return toast('Nom du cours ?'); S.courses.push({id:uid(), name, url: val('curl'), folder: el.dataset.f || null, steps:{lu:null,fiche:null,quiz:null,rev:null}}); },
