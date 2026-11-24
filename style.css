@@ -259,3 +259,8 @@ select.sel{min-width:0;max-width:100%}
 body:not([data-route=fiche]) .cab-hit{display:none}
 .cab-room{margin-top:8px;border:3px solid #1a1222;box-shadow:0 0 0 2px #d9a35a, 0 4px 0 2px #120c18;background:#4a2c16;line-height:0}
 .cab-room canvas{width:100%;height:auto;image-rendering:pixelated;image-rendering:crisp-edges;display:block}
+
+/* ===== v1.9 : bulle du perso touchable ===== */
+.bub-hit{position:fixed;z-index:3;display:block;background:transparent;border:0;padding:0;margin:0;-webkit-tap-highlight-color:transparent;cursor:pointer}
+body:not([data-route=jour]) .bub-hit{display:none}
+.bub-hit:active{background:rgba(255,215,140,.15)}

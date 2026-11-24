@@ -511,6 +511,69 @@ function dailyDone(t = today()){
   const pagesT = S.pages.filter(p => p.date === t).reduce((a,p) => a + p.n, 0);
   return [w || rest, (S.pomo[t] || 0) >= 2, pagesT >= RULES.objectifPages, S.puzzles.filter(p => p.date === t).length >= RULES.objectifPuzzles, !!(S.grade || {})[t]].filter(Boolean).length;
 }
+/* ---- Bulle du perso (Quêtes) : la phrase du moment, et d'autres phrases en touchant la bulle ---- */
+const PHRASES = [
+  `On avance à notre rythme. C'est le bon.`,
+  `Petit pas aujourd'hui, grand chemin dans un mois.`,
+  `Tu sens l'odeur de l'herbe ? Moi oui.`,
+  `Un jour raté ne compte pas. Le suivant, si.`,
+  `J'ai vu un renard ce matin. Il avait l'air pressé.`,
+  `Bois un verre d'eau. Le héros aussi a soif.`,
+  `Les quêtes ne s'envolent pas. Elles t'attendent.`,
+  `La cabane tient bon. Toi aussi.`,
+  `Dix minutes, c'est déjà une victoire.`,
+  `Le château là-bas ? Un jour, on ira voir.`,
+  `Respire. Une chose à la fois.`,
+  `Je garde le feu. Toi, garde le cap.`,
+  `Même les légendes ont commencé niveau 0.`,
+  `Tu as déjà fait plus que hier. Ou tu vas le faire.`,
+  `Le vent tourne. Bon signe, je crois.`,
+  `Une page lue, c'est une page gagnée.`,
+  `Pas besoin d'être parfait. Juste d'être là.`,
+  `J'ai compté les nuages. J'ai perdu le compte.`,
+  `Courage : le plus dur, c'est de commencer.`,
+  `Tes muscles se souviennent de chaque séance.`,
+  `Chaque puzzle rend la tête un peu plus vive.`,
+  `On fait une pause ? Puis on repart.`,
+  `Le chemin est long, mais la vue est belle.`,
+  `Je crois en toi. Même les jours gris.`,
+  `Ce soir, tu seras content de toi. Promis.`,
+  `Un bon repas, une bonne nuit, et ça repart.`,
+  `Les rivières aussi avancent doucement. Et elles creusent des vallées.`,
+  `Tu n'es pas en retard. Tu es en route.`,
+  `Si tu cherches un signe : c'est celui-là.`,
+  `Allez, une quête, et on en reparle.`,
+  `Le sac est prêt. Les bottes aussi. Et toi ?`,
+  `Doucement mais sûrement. C'est notre devise.`,
+];
+// La bulle se gère à part : elle ne relance pas tout l'écran (sinon l'écriture serait coupée)
+document.addEventListener('click', e => { if (e.target.closest('.bub-hit')) { e.stopPropagation(); e.preventDefault(); nextBubble(); } }, true);
+let bubText = null, bubDay = null, bubIdx = -1, bubTimer = null;
+function bubNow(){ return bubText && bubDay === today() ? bubText : (bubNow.ctx ? bubNow.ctx() : ''); }
+// Recale la liste au-dessus de la bulle et place la zone touchable sur la bulle
+function placeBubble(){
+  const box = document.getElementById('scene'), bub = box && box.querySelector('.sc-bub'), hit = document.querySelector('.bub-hit');
+  if (!bub) return;
+  const b = bub.getBoundingClientRect();
+  document.body.style.setProperty('--sh', Math.round(box.getBoundingClientRect().bottom - b.top + 8) + 'px');
+  if (hit) Object.assign(hit.style, {left: Math.round(b.left - 6) + 'px', top: Math.round(b.top - 6) + 'px', width: Math.round(b.width + 12) + 'px', height: Math.round(b.height + 12) + 'px'});
+}
+// Nouvelle phrase, jamais la même deux fois de suite, écrite lettre par lettre
+function nextBubble(){
+  const bub = document.querySelector('#scene .sc-bub'); if (!bub) return;
+  let i; do { i = Math.floor(Math.random() * PHRASES.length); } while (i === bubIdx && PHRASES.length > 1);
+  bubIdx = i; bubText = PHRASES[i]; bubDay = today();
+  clearInterval(bubTimer);
+  const txt = bubText; let k = 0;
+  bub.innerHTML = `<span class="ty"></span><span style="visibility:hidden">${esc(txt)}</span>`;   // place réservée : la bulle ne bouge pas pendant l'écriture
+  placeBubble();
+  const ty = bub.querySelector('.ty'), rest = ty.nextSibling;
+  bubTimer = setInterval(() => {
+    k++; ty.textContent = txt.slice(0, k); rest.textContent = txt.slice(k);
+    if (k % 2 && txt[k-1] !== ' ') play('texte');
+    if (k >= txt.length) clearInterval(bubTimer);
+  }, 38);
+}
 /* ---- Le monde : ciel, paysage du jour (Quêtes), demeure (Fiche) ---- */
 let worldMood = null;
 function drawWorld(r, snap){
@@ -535,11 +598,12 @@ function drawWorld(r, snap){
     const avW = Math.min(70, box.clientWidth * .13), avB = Math.round((LIFT + 2) * scale), bubRight = avX + avW + 150 > box.clientWidth;
     over.innerHTML = `<div class="sc-av" style="left:${Math.round(avX)}px;bottom:${avB}px">${avatarSVG(stageOf(snap.lv.for.lvl), 44)}</div>
       ${w.fire && mood !== 'jour' ? `<div class="sc-glow" style="left:${Math.round(fx * scale)}px"></div>` : ''}
-      <div class="sc-bub ${bubRight ? 'to-l' : 'to-r'}" style="bottom:${avB + Math.round(avW * .55)}px;${bubRight ? `right:${Math.round(box.clientWidth - avX + 6)}px` : `left:${Math.round(avX + avW + 6)}px`}">${esc(bubbleLine(w, n, 5, mood === 'nuit', S.name))}</div>
+      <div class="sc-bub ${bubRight ? 'to-l' : 'to-r'}" style="bottom:${avB + Math.round(avW * .55)}px;${bubRight ? `right:${Math.round(box.clientWidth - avX + 6)}px` : `left:${Math.round(avX + avW + 6)}px`}">${esc(bubNow())}</div>
       <div class="sc-place">${BIOMES[w.biome].name}${w.castle ? ' · château en vue' : ''}${w.river ? ' · rivière' : ''}</div>`;
     // La liste descend jusqu'aux montagnes : le flou coupe leur sommet, juste au-dessus de la bulle du perso
     const bub = over.querySelector('.sc-bub');
-    if (bub) document.body.style.setProperty('--sh', Math.round(box.getBoundingClientRect().bottom - bub.getBoundingClientRect().top + 8) + 'px');
+    bubNow.ctx = () => bubbleLine(w, dailyDone(), 5, skyMood() === 'nuit', S.name);
+    if (bub){ bub.textContent = bubNow(); placeBubble(); }
     clearInterval(drawWorld.fire);
     if (w.fire) { let t = 0; drawWorld.fire = setInterval(() => { if (!document.hidden && document.contains(cv)) drawFire(cv.getContext('2d'), fx, GH - 4, ++t); }, 450); }
   } else {
@@ -611,7 +675,8 @@ function viewJour(snap){
    ${fold('demain', `QUÊTE DU LENDEMAIN${tq ? ` · ${tq.done ? 1 : 0}/1` : ''}`, `${qPerso}${tomorrowWin()}`)}
    ${fold('main', `QUÊTES PRINCIPALES${mqCount('main')}`, mqList('main'))}
    ${fold('side', `QUÊTES SECONDAIRES${mqCount('side')}`, mqList('side'))}
-   ${weekWin()}</div></div>`;
+   ${weekWin()}</div></div>
+   <button class="bub-hit" aria-label="Changer la phrase du personnage"></button>`;
 }
 // Section repliable (toucher le titre ouvre / ferme), état mémorisé
 function fold(id, title, body){
@@ -902,7 +967,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.8.1</div>`;
+   <div class="muted small center">Life RPG · prototype v1.9</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -946,7 +1011,7 @@ function render(){
 }
 function commit(){ save(); render.keepScroll = true; render(); }
 /* ---- Sons choisis (voir sons.js) ---- */
-const SOUND_PICK = {pixel: {quete:'A', onglet:'B', attribut:'B', niveau:'B', cabane:'A'}};
+const SOUND_PICK = {pixel: {quete:'A', onglet:'B', attribut:'B', niveau:'B', cabane:'A', texte:'A'}};
 function play(action){
   if (S.sound === false || typeof SOUNDS === 'undefined') return;
   try { const t = theme(); playSound(SOUNDS[t][action][SOUND_PICK[t][action]]); } catch {}

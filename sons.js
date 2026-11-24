@@ -80,7 +80,8 @@ const SOUNDS = {
       A: () => { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone({f, type:'square', t:i*0.09, d:0.1, v:0.1})); tone({f:1319, type:'square', t:0.56, d:0.5, v:0.11}); },
       B: () => { tone({f:200, f2:1600, type:'square', d:0.35, v:0.08}); [2093, 2637, 3136].forEach((f, i) => tone({f, type:'triangle', t:0.38 + i*0.07, d:0.25, v:0.1})); },
     },
-    // Entrée dans la cabane : grincement d'une vieille porte en bois, rendu 16 bits
+    // Bulle du perso : petit bip de texte façon RPG, très discret
+    texte: { A: () => tone({f:880 + Math.random()*120, type:'square', d:0.018, v:0.025}) },
     // Entrée dans la cabane : vraies portes en bois (Kenney, RPG Audio, CC0), rendu 16 bits léger
     cabane: {
       A: () => sample('sons/porte1.mp3'),
