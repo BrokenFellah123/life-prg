@@ -132,7 +132,7 @@ function landscape(canvas, dateStr, mood, lift = 0){
 
 // ---------- Demeure (onglet Fiche) : cabane → château, une amélioration tous les 2 niveaux ----------
 const HOMES = ['Cabane', 'Chalet', 'Maison de pierre', 'Manoir', 'Tour fortifiée', 'Château'];
-const homeStage = lvl => Math.min(5, Math.floor(lvl / 2));
+const homeStage = () => 0;   // v1.7 : la cabane ne change plus d'aspect, on la meuble de l'intérieur
 const HOME_H = [16, 21, 25, 28, 38, 56];   // hauteur de chaque demeure (pixels du dessin)
 
 function drawHome(ctx, cx, gy, st, night, N){
@@ -221,4 +221,47 @@ function bubbleLine(w, done, total, night, name){
   if (total - done === 1) return pick([`Plus qu'une. Tu l'as.`, `Une dernière et c'est plié.`]);
   if (w.fire && night) return pick([`On se pose cinq minutes près du feu ?`, `${done} sur ${total}. Le feu tient bon, toi aussi.`]);
   return pick([`${done} sur ${total}. Ça avance.`, `Encore ${total - done} quêtes et la journée est pliée.`, `Belle ${place} aujourd'hui. On continue ?`]);
+}
+
+// ---------- Intérieur de la cabane (v1.7) : pièce en rondins, meublée selon les objets ajoutés ----------
+function cabinInterior(canvas, items, mood){
+  const W = canvas.width, H = canvas.height, ctx = canvas.getContext('2d'), night = mood === 'nuit';
+  const dim = c => night ? mix(c, '#140c24', .38) : c;
+  const fy = H - 26;                                   // ligne du sol
+  // Mur en rondins
+  for (let y = 0; y < fy; y += 6){ px(ctx, 0, y, W, 6, dim('#8a5630')); px(ctx, 0, y + 4, W, 1, dim('#6e4220')); px(ctx, 0, y + 5, W, 1, dim('#4a2c16')); px(ctx, 0, y, W, 1, dim('#a8703e')); }
+  for (let y = 0; y < fy; y += 12) for (let x = (y / 12 % 2) * 20 + 8; x < W; x += 40) px(ctx, x, y + 2, 2, 2, dim('#5a3418'));   // nœuds du bois
+  // Poutre et plafond
+  px(ctx, 0, 0, W, 4, dim('#4a2c16')); px(ctx, 0, 4, W, 1, dim('#2e1a0c'));
+  // Plancher
+  for (let y = fy; y < H; y += 5){ px(ctx, 0, y, W, 5, dim('#9a6a3a')); px(ctx, 0, y + 4, W, 1, dim('#6e4220')); }
+  for (let y = fy, k = 0; y < H; y += 5, k++) for (let x = (k % 2) * 17 + 6; x < W; x += 34) px(ctx, x, y, 1, 4, dim('#6e4220'));
+  px(ctx, 0, fy, W, 2, dim('#3a2210'));                // plinthe
+  // Fenêtre (le ciel suit l'heure)
+  const wx = Math.round(W / 2 - 14), wy = 14, ww = 28, wh = 22, [s1, s2] = SKY[mood];
+  px(ctx, wx - 3, wy - 3, ww + 6, wh + 6, '#3a2210');
+  for (let i = 0; i < wh; i++) px(ctx, wx, wy + i, ww, 1, mix(s1, s2, i / wh));
+  if (night){ px(ctx, wx + 6, wy + 5, 1, 1, '#fff7e6'); px(ctx, wx + 20, wy + 9, 1, 1, '#fff7e6'); px(ctx, wx + 15, wy + 3, 1, 1, '#fff7e6'); px(ctx, wx + 18, wy + 13, 4, 4, '#f3ecd8'); }
+  else { px(ctx, wx + 5, wy + 4, 5, 5, mood === 'jour' ? '#ffd23f' : '#ffb070'); px(ctx, wx, wy + wh - 6, ww, 6, '#5fa04e'); px(ctx, wx, wy + wh - 6, ww, 1, '#7cc060'); }
+  px(ctx, wx + ww / 2 - 1, wy, 2, wh, '#5a3418'); px(ctx, wx, wy + wh / 2 - 1, ww, 2, '#5a3418');
+  px(ctx, wx - 4, wy + wh + 3, ww + 8, 3, '#6e4220');  // rebord
+  // Porte à droite
+  const dx = W - 34; px(ctx, dx - 2, fy - 44, 26, 44, '#2e1a0c'); px(ctx, dx, fy - 42, 22, 42, dim('#6e4220'));
+  for (let x = dx + 5; x < dx + 22; x += 6) px(ctx, x, fy - 42, 1, 42, dim('#4a2c16'));
+  px(ctx, dx + 2, fy - 30, 18, 2, dim('#4a2c16')); px(ctx, dx + 2, fy - 12, 18, 2, dim('#4a2c16')); px(ctx, dx + 17, fy - 22, 2, 3, '#d9a35a');
+  // Lumière chaude la nuit
+  if (night){ ctx.fillStyle = 'rgba(255,190,90,.10)'; ctx.fillRect(0, 0, W, H); }
+  // ---- Objets ----
+  if (items.lit){   // lit à gauche : cadre en bois, matelas, oreiller, couverture rouge à carreaux
+    const bx = 10, bw = 58, by = fy + 6;
+    px(ctx, bx, by - 30, 5, 30, '#4a2c16'); px(ctx, bx - 1, by - 32, 7, 3, '#6e4220');            // tête de lit
+    px(ctx, bx + bw - 4, by - 16, 4, 16, '#4a2c16'); px(ctx, bx + bw - 5, by - 18, 6, 3, '#6e4220'); // pied de lit
+    px(ctx, bx + 4, by - 12, bw - 8, 6, '#6e4220'); px(ctx, bx + 4, by - 12, bw - 8, 1, '#9a6234');  // cadre
+    px(ctx, bx + 5, by - 17, bw - 10, 5, '#f3ecd8');                                                // matelas
+    px(ctx, bx + 6, by - 22, 12, 6, '#fff7e6'); px(ctx, bx + 6, by - 17, 12, 1, '#d8cfc0');          // oreiller
+    px(ctx, bx + 19, by - 19, bw - 24, 8, dim('#b8323a'));                                          // couverture
+    for (let x = bx + 21; x < bx + bw - 6; x += 5) px(ctx, x, by - 19, 2, 8, dim('#8a2228'));
+    px(ctx, bx + 19, by - 16, bw - 24, 1, dim('#d9505a'));
+    px(ctx, bx + 5, by - 6, 2, 6, '#3a2210'); px(ctx, bx + bw - 7, by - 6, 2, 6, '#3a2210');          // pieds
+  }
 }

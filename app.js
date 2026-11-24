@@ -108,6 +108,8 @@ const blank = () => ({
   kcal:{},          // date → total
   grade:{},         // date → note de qualité C / B / A / S
   poids:{},         // date → poids en kg (suivi, sans XP)
+  cabane:{},        // objets posés dans la cabane {lit:true}
+  sommeil:{},       // date du réveil → heures dormies (suivi, sans XP)
   mquests:[],       // quêtes principales / secondaires {id,type:'main'|'side',text,done}
   fold:{},          // sections repliées de l'onglet Quêtes
 });
@@ -525,7 +527,12 @@ function drawWorld(r, snap){
     const st = homeScene(cv, snap.perso, mood);
     // La liste de la Fiche descend jusqu'au toit de la demeure (le flou fin est juste au-dessus)
     document.body.style.setProperty('--sh', Math.round(box.clientWidth / W * (14 + HOME_H[st] + 3)) + 'px');
-    over.innerHTML = `<div class="sc-place">Ta demeure : ${HOMES[st]}${st < 5 ? ` · ${HOMES[st+1].toLowerCase()} au niv. ${(st+1)*2}` : ''}</div>`;
+    const sc = box.clientWidth / W, newIt = CABANE.some(o => snap.perso >= o.lvl && !(S.cabane || {})[o.k]);
+    over.innerHTML = `<div class="sc-place">Ta cabane · touche-la pour entrer${newIt ? ' · ★ nouvel objet' : ''}</div>`;
+    // Zone touchable posée sur la cabane (la scène elle-même ne reçoit pas les touches)
+    const hit = document.querySelector('.cab-hit');
+    if (hit){ hit.style.left = Math.round(box.getBoundingClientRect().left + (W/2 - 13) * sc) + 'px'; hit.style.width = Math.round(26 * sc) + 'px';
+      hit.style.bottom = `calc(var(--nav, 53px) + ${Math.round(10 * sc)}px)`; hit.style.height = Math.round(21 * sc) + 'px'; }
   }
 }
 // Le ciel change même sans toucher l'écran (aube, jour, crépuscule, nuit)
@@ -620,6 +627,35 @@ function weekWin(){
   return `<div class="win flat row"><div class="grow"><div class="qt">Quête de la semaine</div><div class="muted small">Muscu ${Math.min(n,4)}/4 séances · la 4e donne +${RULES.semaine4} XP bonus<br>Du lundi ${shortDate(wk)} au dimanche ${shortDate(addDays(wk, 6))} · repart à 0 lundi</div></div><span class="ttl big">${Math.min(n,4)}/4</span></div>`;
 }
 
+/* ---- La cabane (v1.7) : on la meuble en montant de niveau ---- */
+const CABANE = [   // objets déblocables, par niveau perso. Ajouter ici les prochains.
+  {k:'lit', name:'Lit', lvl:1, desc:'Pour noter tes heures de sommeil chaque jour.'},
+];
+const hFmt = v => String(Math.round(v*100)/100).replace('.', ',');
+function sleepWin(){
+  const t = today(), Z = S.sommeil || {}, v = Z[t];
+  const days = Array.from({length:14}, (_,i) => addDays(t, -i));
+  const w7 = days.slice(0, 7).filter(d => Z[d] > 0), avg = w7.length ? w7.reduce((a,d) => a + Z[d], 0) / w7.length : null;
+  return `<div class="sec">Sommeil</div>
+   <div class="win"><div class="qt">Nuit dernière</div>
+     <div class="row"><input class="mid" type="text" inputmode="decimal" placeholder="ex. 7,5" value="${v != null ? hFmt(v) : ''}" data-in="sommeil"><span class="muted">heures</span></div>
+     <div class="muted small">${avg != null ? `Moyenne sur 7 jours : ${hFmt(Math.round(avg*10)/10)} h (${w7.length} nuit${w7.length>1?'s':''} notée${w7.length>1?'s':''})` : 'Note tes heures en chiffres, avec les demies : 7,5 = 7 h 30. Pour le suivi, sans XP.'}</div></div>
+   <div class="win flat log">${days.map(d => `<div><span class="d">${shortDate(d)}</span><span class="grow">${Z[d] > 0 ? hFmt(Z[d]) + ' h' : '<span class="muted">—</span>'}</span>${Z[d] > 0 ? `<span class="xp" style="min-width:${Math.round(Math.min(12, Z[d]) * 7)}px;height:8px;background:var(--sag);display:inline-block;border-radius:0"></span>` : ''}</div>`).join('')}</div>`;
+}
+function viewCabane(snap){
+  const lvl = snap.perso, C = S.cabane || {};
+  const items = CABANE.map(o => {
+    const placed = !!C[o.k], open = lvl >= o.lvl;
+    return `<div class="row" style="padding:6px 0">${placed ? '<span class="ttl" style="color:var(--vit)">✓</span>' : open ? '<span class="ttl" style="color:var(--accent)">★</span>' : '<span class="ttl muted">🔒</span>'}
+      <div class="grow col"><span class="name">${o.name}</span><span class="muted small">${placed ? 'Posé dans ta cabane. ' : open ? 'Débloqué ! ' : `Se débloque au niveau ${o.lvl}. `}${o.desc}</span></div>
+      ${placed ? '' : open ? `<button class="btn sm pri" data-act="cabAdd" data-k="${o.k}">+ Ajouter</button>` : `<span class="muted small">Niv. ${o.lvl}</span>`}</div>`; }).join('');
+  const nb = CABANE.filter(o => C[o.k]).length;
+  return `<a class="back" href="#fiche">‹ Fiche</a>
+   <div class="row"><div class="grow"><div class="ttl big">Ta cabane</div><div class="muted small">${nb ? `${nb} objet${nb>1?'s':''} posé${nb>1?'s':''}` : 'Vide pour l\'instant. Monte de niveau pour la meubler.'}</div></div></div>
+   <div class="cab-room"><canvas id="cabcv" width="160" height="100"></canvas></div><!--/tete-->
+   <div class="sec">Mobilier</div><div class="win flat">${items}<div class="muted small" style="margin-top:6px">D'autres objets arriveront avec les prochains niveaux.</div></div>
+   ${C.lit ? sleepWin() : ''}`;
+}
 function viewFiche(snap){
   const st = stageOf(snap.lv.for.lvl);
   const rows = STATS.map(s => {
@@ -638,7 +674,8 @@ function viewFiche(snap){
      <div class="row wrap"><span class="ttl" style="white-space:nowrap">NIV. ${snap.perso} · ${tierTxt(snap.tier)}</span></div></div></div>
    ${wardrobeWin()}</div>
    <div class="pane-scroll"><div class="pane-inner"><div class="win"><div class="ttl" style="color:var(--accent)">ATTRIBUTS</div>${rows}</div>
-   <a class="btn ghost" href="#reglages" style="text-align:center;text-decoration:none">Sauvegarde et réglages</a></div></div>`;
+   <a class="btn ghost" href="#reglages" style="text-align:center;text-decoration:none">Sauvegarde et réglages</a></div></div>
+   <a class="cab-hit" href="#cabane" aria-label="Entrer dans la cabane"></a>`;
 }
 
 function viewForce(snap){
@@ -840,11 +877,11 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.6</div>`;
+   <div class="muted small center">Life RPG · prototype v1.7</div>`;
 }
 
 /* ================= Rendu et routage ================= */
-const VIEWS = {jour:viewJour, fiche:viewFiche, force:viewForce, savoir:viewSavoir, sagesse:viewSagesse, strategie:viewStrategie, vitalite:viewVitalite, reglages:viewReglages};
+const VIEWS = {jour:viewJour, fiche:viewFiche, force:viewForce, savoir:viewSavoir, sagesse:viewSagesse, strategie:viewStrategie, vitalite:viewVitalite, reglages:viewReglages, cabane:viewCabane};
 const TABS = [['jour','Quêtes'],['fiche','Fiche']];
 // Petite main de curseur RPG devant l'onglet actif
 const HAND = (() => { const g = ['Xo...','Xoo..','Xooo.','Xoooo','Xooo.','Xoo..','Xo...']; let r = '';   // petit curseur de menu, cuivre doré
@@ -869,14 +906,16 @@ function render(){
   document.documentElement.classList.toggle('locked', cut > 0 || r === 'jour' || r === 'fiche');
   document.getElementById('app').innerHTML = html;
   drawWorld(r, snap);
-  const parent = {force:'fiche', savoir:'fiche', sagesse:'fiche', strategie:'fiche', vitalite:'fiche', reglages:'fiche'}[r] || r;
+  if (r === 'cabane'){ const cv = document.getElementById('cabcv'); if (cv && typeof cabinInterior === 'function') cabinInterior(cv, S.cabane || {}, skyMood()); }
+  const parent = {force:'fiche', savoir:'fiche', sagesse:'fiche', strategie:'fiche', vitalite:'fiche', reglages:'fiche', cabane:'fiche'}[r] || r;
   document.getElementById('tabs').innerHTML = TABS.map(([k,l]) => `<a href="#${k}" class="${k===parent?'on':''}">${k===parent?HAND:''}${l}</a>`).join('');
   if (render.keepScroll) scroller().scrollTop = y; render.keepScroll = false;
   // Montée de niveau ?
   if (lastLevels){ for (const s of STATS) if (s.k !== 'vit' && snap.lv[s.k].lvl > lastLevels[s.k]) toast(`★ ${s.name} niveau ${snap.lv[s.k].lvl} ! ★`, 'lvl', 4000); }
   if (lastLevels && snap.perso > lastLevels.perso){
     const rw = REWARDS.filter(i => i.lvl > lastLevels.perso && i.lvl <= snap.perso).map(i => i.label).join(', ');
-    toast(`★ Niveau ${snap.perso} !${rw ? ' Récompense : ' + rw : ''} ★`, 'lvl', 5000);
+    const cab = CABANE.filter(o => o.lvl > lastLevels.perso && o.lvl <= snap.perso).map(o => o.name).join(', ');
+    toast(`★ Niveau ${snap.perso} !${rw ? ' Récompense : ' + rw : ''}${cab ? ' · Cabane : ' + cab + ' débloqué' : ''} ★`, 'lvl', 5000);
   }
   lastLevels = Object.fromEntries(STATS.map(s => [s.k, snap.lv[s.k].lvl])); lastLevels.perso = snap.perso;
 }
@@ -913,6 +952,8 @@ const ACTS = {
   pomo(el){ const n = +el.dataset.n, t = today(), c = S.pomo[t] || 0; S.pomo[t] = c >= n ? n-1 : n; if (S.pomo[t] > c) toast(`+${RULES.pomo} XP Savoir`); },
   pomoPlus(){ const t = today(); S.pomo[t] = (S.pomo[t] || 0) + 1; toast(`+${RULES.pomo} XP Savoir`); },
   pomoMinus(){ const t = today(); S.pomo[t] = Math.max(0, (S.pomo[t] || 0) - 1); },
+  cabAdd(el){ const o = CABANE.find(x => x.k === el.dataset.k); if (!o || persoLvl < o.lvl) return;
+    S.cabane = S.cabane || {}; S.cabane[o.k] = true; toast(`${o.name} ajouté à ta cabane !`); },
   tqAdd(){ const text = val('tqtext'); if (!text) return toast('Écris ta quête'); const d = addDays(today(), 1);
     S.tquests = (S.tquests || []).filter(x => x.date !== d); S.tquests.push({id:uid(), date:d, stat: val('tqstat') || 'sag', text, done:null, at: Date.now()}); toast('Quête prête pour demain'); },
   tqDel(el){ const q = S.tquests.find(x => x.id === el.dataset.id); S.tquests = S.tquests.filter(x => x !== q); setTimeout(() => { const i = document.querySelector('[data-in=tqtext]'); if (i && q) { i.value = q.text; document.querySelector('[data-in=tqstat]').value = q.stat; } }, 0); },
@@ -1038,6 +1079,7 @@ document.addEventListener('change', e => {
   else if (k === 'kg'){ const c = ensureCur(); c.ex[el.dataset.id].kg = isNaN(num) ? null : num; }
   else if (k === 'load'){ if (isNaN(num)) delete S.loads[el.dataset.id]; else S.loads[el.dataset.id] = num;
     if (S.cur && S.cur.ex[el.dataset.id] && !S.cur.ex[el.dataset.id].sets.some(x => x)) S.cur.ex[el.dataset.id].kg = isNaN(num) ? null : num; }
+  else if (k === 'sommeil'){ S.sommeil = S.sommeil || {}; if (num > 0 && num <= 24) S.sommeil[today()] = Math.round(num*4)/4; else { delete S.sommeil[today()]; if (String(el.value).trim()) toast('Entre un nombre d\'heures, ex. 7,5'); } }
   else if (k === 'poids'){ S.poids = S.poids || {}; if (num > 0 && num < 400) S.poids[today()] = Math.round(num*10)/10; else delete S.poids[today()]; }
   else if (k === 'name'){ S.name = el.value.trim() || 'Boss'; }
   else if (k === 'import'){
