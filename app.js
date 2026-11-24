@@ -412,6 +412,44 @@ function finishSession(){
 const doneToday = () => S.workouts.find(w => w.date === today());
 
 /* ================= Écrans ================= */
+function dailyDone(t = today()){
+  const w = S.workouts.some(x => x.date === t), rest = S.rest.includes(t);
+  const pagesT = S.pages.filter(p => p.date === t).reduce((a,p) => a + p.n, 0);
+  return [w || rest, (S.pomo[t] || 0) >= 2, pagesT >= RULES.objectifPages, S.puzzles.some(p => p.date === t), !!(S.grade || {})[t]].filter(Boolean).length;
+}
+/* ---- Le monde : ciel, paysage du jour (Quêtes), demeure (Fiche) ---- */
+let worldMood = null;
+function drawWorld(r, snap){
+  const mood = skyMood(); worldMood = mood;
+  document.body.dataset.sky = mood;
+  const box = document.getElementById('scene'); if (!box) return;
+  const show = r === 'jour' || r === 'fiche';
+  document.body.classList.toggle('has-scene', show);
+  if (!show){ box.innerHTML = ''; return; }
+  const W = Math.min(190, Math.round(Math.min(innerWidth, 560) / 3)), H = r === 'jour' ? 48 : 58;
+  box.className = r === 'jour' ? 'land' : 'home';
+  box.innerHTML = `<canvas width="${W}" height="${H}"></canvas><div class="sc-over"></div>`;
+  const cv = box.querySelector('canvas'), over = box.querySelector('.sc-over');
+  if (r === 'jour'){
+    const w = landscape(cv, today(), mood), n = dailyDone();
+    const fx = Math.round(w.fireX * W);
+    if (w.fire) drawFire(cv.getContext('2d'), fx, H - 3, 0);
+    const scale = box.clientWidth / W;
+    const avX = w.fire ? (fx - 16) * scale : box.clientWidth * .42;
+    over.innerHTML = `<div class="sc-av" style="left:${Math.round(avX)}px">${avatarSVG(stageOf(snap.lv.for.lvl), 44)}</div>
+      ${w.fire && mood !== 'jour' ? `<div class="sc-glow" style="left:${Math.round(fx * scale)}px"></div>` : ''}
+      <div class="sc-bub" style="left:${Math.max(8, Math.min(box.clientWidth - 230, Math.round(avX) - 90))}px">${esc(bubbleLine(w, n, 5, mood === 'nuit', S.name))}</div>
+      <div class="sc-place">${BIOMES[w.biome].name}${w.castle ? ' · château en vue' : ''}${w.river ? ' · rivière' : ''}</div>`;
+    clearInterval(drawWorld.fire);
+    if (w.fire) { let t = 0; drawWorld.fire = setInterval(() => { if (!document.hidden && document.contains(cv)) drawFire(cv.getContext('2d'), fx, H - 3, ++t); }, 450); }
+  } else {
+    clearInterval(drawWorld.fire);
+    const st = homeScene(cv, snap.perso, mood);
+    over.innerHTML = `<div class="sc-place">Ta demeure : ${HOMES[st]}${st < 5 ? ` · ${HOMES[st+1].toLowerCase()} au niv. ${(st+1)*2}` : ''}</div>`;
+  }
+}
+// Le ciel change même sans toucher l'écran (aube, jour, crépuscule, nuit)
+setInterval(() => { if (!document.hidden && skyMood() !== worldMood) render(); }, 60000);
 function viewJour(snap){
   const t = today();
   const w = doneToday(), rest = S.rest.includes(t);
@@ -428,7 +466,7 @@ function viewJour(snap){
   const tq = (S.tquests || []).find(x => x.date === t);
   const qPerso = tq ? `<div class="quest ${tq.done?'dn':''}">${check(!!tq.done,'tqDone',`data-id="${tq.id}"`)}<div class="grow col">
      <div class="row"><span class="grow qt name">${esc(tq.text)}</span><span class="xp">+${RULES.queteDemain}</span></div>
-     <div class="row"><span class="chip" style="background:var(--${tq.stat})">${STATS.find(x=>x.k===tq.stat).abbr}</span><span class="muted small">Ta quête, écrite hier</span></div></div></div>` : '';
+     <div class="row"><span class="chip" style="background:var(--${tq.stat})">${STATS.find(x=>x.k===tq.stat).abbr}</span><span class="muted small">${tq.at ? `Écrite hier à ${new Date(tq.at).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})}` : 'Ta quête, écrite hier'}</span></div></div></div>` : '';
   const retour = retourToday() ? `<div class="banner">★ QUÊTE RETOUR ★<br>Bon retour ! Toute l'XP gagnée aujourd'hui compte double.</div>` : '';
 
   const qSeance = w
@@ -696,12 +734,12 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.1</div>`;
+   <div class="muted small center">Life RPG · prototype v1.2</div>`;
 }
 
 /* ================= Rendu et routage ================= */
 const VIEWS = {jour:viewJour, fiche:viewFiche, force:viewForce, savoir:viewSavoir, sagesse:viewSagesse, strategie:viewStrategie, vitalite:viewVitalite, reglages:viewReglages};
-const TABS = [['jour','Quêtes'],['fiche','Fiche'],['force','Force'],['savoir','Cours']];
+const TABS = [['jour','Quêtes'],['fiche','Fiche']];
 let lastLevels = null;
 function route(){ const r = location.hash.slice(1).split('/')[0]; return VIEWS[r] ? r : 'jour'; }
 const routeArg = () => decodeURIComponent(location.hash.slice(1).split('/')[1] || '');
@@ -712,9 +750,12 @@ function render(){
   const snap = snapshot(), r = route();
   persoLvl = snap.perso;
   const y = window.scrollY;
-  document.getElementById('app').innerHTML = VIEWS[r](snap, routeArg());
-  const parent = {sagesse:'fiche', strategie:'fiche', vitalite:'fiche', reglages:'fiche'}[r] || r;
-  document.getElementById('tabs').innerHTML = TABS.map(([k,l]) => `<a href="#${k}" class="${k===parent?'on':''}"><i></i>${l}</a>`).join('');
+  let html = VIEWS[r](snap, routeArg());
+  if (!html.trimStart().startsWith('<a class="back"') && (r === 'force' || r === 'savoir')) html = `<a class="back" href="#fiche">‹ Fiche</a>` + html;
+  document.getElementById('app').innerHTML = html;
+  drawWorld(r, snap);
+  const parent = {force:'fiche', savoir:'fiche', sagesse:'fiche', strategie:'fiche', vitalite:'fiche', reglages:'fiche'}[r] || r;
+  document.getElementById('tabs').innerHTML = TABS.map(([k,l]) => `<a href="#${k}" class="${k===parent?'on':''}">${k===parent?'▸ ':''}${l}</a>`).join('');
   if (render.keepScroll) window.scrollTo(0, y); render.keepScroll = false;
   // Montée de niveau ?
   if (lastLevels){ for (const s of STATS) if (s.k !== 'vit' && snap.lv[s.k].lvl > lastLevels[s.k]) toast(`★ ${s.name} niveau ${snap.lv[s.k].lvl} ! ★`, 'lvl', 4000); }
@@ -758,7 +799,7 @@ const ACTS = {
   pomoPlus(){ const t = today(); S.pomo[t] = (S.pomo[t] || 0) + 1; toast(`+${RULES.pomo} XP Savoir`); },
   pomoMinus(){ const t = today(); S.pomo[t] = Math.max(0, (S.pomo[t] || 0) - 1); },
   tqAdd(){ const text = val('tqtext'); if (!text) return toast('Écris ta quête'); const d = addDays(today(), 1);
-    S.tquests = (S.tquests || []).filter(x => x.date !== d); S.tquests.push({id:uid(), date:d, stat: val('tqstat') || 'sag', text, done:null}); toast('Quête prête pour demain'); },
+    S.tquests = (S.tquests || []).filter(x => x.date !== d); S.tquests.push({id:uid(), date:d, stat: val('tqstat') || 'sag', text, done:null, at: Date.now()}); toast('Quête prête pour demain'); },
   tqDel(el){ const q = S.tquests.find(x => x.id === el.dataset.id); S.tquests = S.tquests.filter(x => x !== q); setTimeout(() => { const i = document.querySelector('[data-in=tqtext]'); if (i && q) { i.value = q.text; document.querySelector('[data-in=tqstat]').value = q.stat; } }, 0); },
   tqDone(el){ const q = S.tquests.find(x => x.id === el.dataset.id); q.done = q.done ? null : today(); if (q.done) toast(`Quête réussie ! +${RULES.queteDemain} XP`); },
   mqAdd(el){ const t = el.dataset.t, text = val('mq-' + t); if (!text) return toast('Écris ta quête');
