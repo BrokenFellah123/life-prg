@@ -220,3 +220,10 @@ body.has-scene #app{overflow:hidden;display:flex;flex-direction:column;-webkit-m
 .pane-scroll{flex:1;min-height:0;overflow-y:scroll;-webkit-overflow-scrolling:touch;
   -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 8px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 8px),transparent)}
 .pane-inner{min-height:calc(100% + 1px);display:flex;flex-direction:column;gap:14px;padding-bottom:18px}
+
+/* Onglet actif : bois plus clair, liseré allumé, petite main */
+nav.tabs a{gap:8px;align-items:center;border-radius:0;margin:0 2px}
+nav.tabs a.on{background:#5a3c26;background-image:repeating-linear-gradient(0deg,rgba(0,0,0,.14) 0 2px,transparent 2px 7px);color:#ffe6a8;box-shadow:inset 0 3px 0 #ffcf7a,inset 0 -2px 0 rgba(0,0,0,.25)}
+nav.tabs .hand{display:block;shape-rendering:crispEdges;animation:point 1s steps(2) infinite}
+@keyframes point{0%,100%{transform:translateX(0)}50%{transform:translateX(2px)}}
+@media (prefers-reduced-motion:reduce){nav.tabs .hand{animation:none}}
