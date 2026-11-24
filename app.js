@@ -412,6 +412,8 @@ function finishSession(){
 const doneToday = () => S.workouts.find(w => w.date === today());
 
 /* ================= Écrans ================= */
+// Sur Quêtes et Fiche, la liste défile dans sa propre zone (85 % du haut de l'écran)
+const scroller = () => document.body.classList.contains('has-scene') ? document.getElementById('app') : (document.scrollingElement || document.documentElement);
 function dailyDone(t = today()){
   const w = S.workouts.some(x => x.date === t), rest = S.rest.includes(t);
   const pagesT = S.pages.filter(p => p.date === t).reduce((a,p) => a + p.n, 0);
@@ -424,9 +426,9 @@ function drawWorld(r, snap){
   document.body.dataset.sky = mood;
   const box = document.getElementById('scene'); if (!box) return;
   const show = r === 'jour' || r === 'fiche';
-  document.body.classList.toggle('has-scene', show);
+  const nav = document.getElementById('tabs'); if (nav) document.body.style.setProperty('--nav', nav.offsetHeight + 'px');
   if (!show){ box.innerHTML = ''; return; }
-  const W = r === 'jour' ? Math.min(190, Math.round(Math.min(innerWidth, 560) / 3)) : Math.min(280, Math.round(Math.min(innerWidth, 560) / 2)), H = r === 'jour' ? 80 : 92, LIFT = r === 'jour' ? 16 : 0;
+  const W = r === 'jour' ? Math.min(190, Math.round(Math.min(innerWidth, 560) / 3)) : Math.min(280, Math.round(Math.min(innerWidth, 560) / 2)), H = r === 'jour' ? 64 : 76, LIFT = 0;
   box.className = r === 'jour' ? 'land' : 'home';
   box.innerHTML = `<canvas width="${W}" height="${H}"></canvas><div class="sc-over"></div>`;
   const cv = box.querySelector('canvas'), over = box.querySelector('.sc-over');
@@ -438,9 +440,10 @@ function drawWorld(r, snap){
     if (w.fire) drawFire(cv.getContext('2d'), fx, GH - 4, 0);
     const scale = box.clientWidth / W;
     const avX = w.fire ? (fx - 14) * scale : box.clientWidth * .44;
-    over.innerHTML = `<div class="sc-av" style="left:${Math.round(avX)}px;bottom:${Math.round((LIFT + 2) * scale)}px">${avatarSVG(stageOf(snap.lv.for.lvl), 44)}</div>
+    const avW = Math.min(70, box.clientWidth * .13), avB = Math.round((LIFT + 2) * scale), bubRight = avX + avW + 150 > box.clientWidth;
+    over.innerHTML = `<div class="sc-av" style="left:${Math.round(avX)}px;bottom:${avB}px">${avatarSVG(stageOf(snap.lv.for.lvl), 44)}</div>
       ${w.fire && mood !== 'jour' ? `<div class="sc-glow" style="left:${Math.round(fx * scale)}px"></div>` : ''}
-      <div class="sc-bub" style="bottom:${Math.round((LIFT + 2) * scale + box.clientWidth * .13)}px;left:${Math.max(8, Math.min(box.clientWidth - 198, Math.round(avX) - 70))}px">${esc(bubbleLine(w, n, 5, mood === 'nuit', S.name))}</div>
+      <div class="sc-bub ${bubRight ? 'to-l' : 'to-r'}" style="bottom:${avB + Math.round(avW * .55)}px;${bubRight ? `right:${Math.round(box.clientWidth - avX + 6)}px` : `left:${Math.round(avX + avW + 6)}px`}">${esc(bubbleLine(w, n, 5, mood === 'nuit', S.name))}</div>
       <div class="sc-place">${BIOMES[w.biome].name}${w.castle ? ' · château en vue' : ''}${w.river ? ' · rivière' : ''}</div>`;
     clearInterval(drawWorld.fire);
     if (w.fire) { let t = 0; drawWorld.fire = setInterval(() => { if (!document.hidden && document.contains(cv)) drawFire(cv.getContext('2d'), fx, GH - 4, ++t); }, 450); }
@@ -451,6 +454,8 @@ function drawWorld(r, snap){
   }
 }
 // Le ciel change même sans toucher l'écran (aube, jour, crépuscule, nuit)
+// Redessine quand la page a fini de charger (polices, styles) ou quand l'écran tourne
+['load','resize','orientationchange'].forEach(ev => window.addEventListener(ev, () => drawWorld(route(), snapshot())));
 setInterval(() => { if (document.hidden) return; if (skyMood() !== worldMood) render(); else drawWorld(route(), snapshot()); }, 60000);   // le soleil avance chaque minute
 function viewJour(snap){
   const t = today();
@@ -736,7 +741,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.2.3</div>`;
+   <div class="muted small center">Life RPG · prototype v1.2.4</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -751,14 +756,15 @@ function render(){
   applyTheme();
   const snap = snapshot(), r = route();
   persoLvl = snap.perso;
-  const y = window.scrollY;
+  document.body.classList.toggle('has-scene', r === 'jour' || r === 'fiche');
+  const y = scroller().scrollTop;
   let html = VIEWS[r](snap, routeArg());
   if (!html.trimStart().startsWith('<a class="back"') && (r === 'force' || r === 'savoir')) html = `<a class="back" href="#fiche">‹ Fiche</a>` + html;
   document.getElementById('app').innerHTML = html;
   drawWorld(r, snap);
   const parent = {force:'fiche', savoir:'fiche', sagesse:'fiche', strategie:'fiche', vitalite:'fiche', reglages:'fiche'}[r] || r;
   document.getElementById('tabs').innerHTML = TABS.map(([k,l]) => `<a href="#${k}" class="${k===parent?'on':''}">${k===parent?'▸ ':''}${l}</a>`).join('');
-  if (render.keepScroll) window.scrollTo(0, y); render.keepScroll = false;
+  if (render.keepScroll) scroller().scrollTop = y; render.keepScroll = false;
   // Montée de niveau ?
   if (lastLevels){ for (const s of STATS) if (s.k !== 'vit' && snap.lv[s.k].lvl > lastLevels[s.k]) toast(`★ ${s.name} niveau ${snap.lv[s.k].lvl} ! ★`, 'lvl', 4000); }
   if (lastLevels && snap.perso > lastLevels.perso){
@@ -853,7 +859,7 @@ const ACTS = {
   exKo(el){ const e = ensureCur().ex[el.dataset.id]; const on = e.sets.some(x => x === 2); e.sets = e.sets.map((x,i) => on ? 0 : (i === e.sets.length-1 ? 2 : 1)); },
   run(el){ const c = ensureCur(); c.run[+el.dataset.i] = !c.run[+el.dataset.i]; },
   type(el){ const c = S.cur; if (c && Object.values(c.ex).some(e => e.sets.some(x => x)) && !confirm('Changer de séance efface les séries cochées. Continuer ?')) return; setCurType(el.dataset.t); },
-  finish(){ ensureCur(); const w = finishSession(); if (w) { toast(`Séance terminée ! +${RULES.seance} XP`); window.scrollTo(0,0); } },
+  finish(){ ensureCur(); const w = finishSession(); if (w) { toast(`Séance terminée ! +${RULES.seance} XP`); scroller().scrollTop = 0; } },
   abandon(){ if (confirm('Effacer la séance en cours ?')) S.cur = null; },
   undoWorkout(){
     const w = doneToday(); if (!w || !confirm('Annuler la séance du jour ? Tu pourras la refaire.')) return;
@@ -900,7 +906,7 @@ document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return; const el = e.target; if (!el.dataset?.in) return;
   const btn = el.parentElement.querySelector('[data-act]'); if (btn) { e.preventDefault(); el.dispatchEvent(new Event('change', {bubbles:true})); btn.click(); }
 });
-window.addEventListener('hashchange', () => { window.scrollTo(0,0); render(); });
+window.addEventListener('hashchange', () => { window.scrollTo(0,0); document.getElementById('app').scrollTop = 0; render(); });
 // Repasser sur l'appli le lendemain : rafraîchir la date
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
 

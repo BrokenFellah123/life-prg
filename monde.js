@@ -199,9 +199,9 @@ function homeScene(canvas, lvl, mood){
   skyBand(ctx, W, H, mood);
   sunMoon(ctx, mood, 22, 12, H, W);
   const a = 1.3;
-  for (let x = 0; x < W; x++){ const y = Math.round(H - 40 - 3 * Math.sin(x / 19 + a)); px(ctx, x, y, 1, H - y, N(B.mid)); px(ctx, x, y + 3, 1, H - y, N(B.mid2)); }
-  const gy = H - 34; px(ctx, 0, gy, W, H - gy, N(B.grass)); px(ctx, 0, gy, W, 1, N(B.grass2));
-  for (let i = 0; i < W / 3; i++) px(ctx, Math.round(r() * W), gy + 1 + Math.floor(r() * 33), 1, 1, N(B.flowers[Math.floor(r() * 3)]));
+  for (let x = 0; x < W; x++){ const y = Math.round(H - 22 - 3 * Math.sin(x / 19 + a)); px(ctx, x, y, 1, H - y, N(B.mid)); px(ctx, x, y + 3, 1, H - y, N(B.mid2)); }
+  const gy = H - 14; px(ctx, 0, gy, W, H - gy, N(B.grass)); px(ctx, 0, gy, W, 1, N(B.grass2));
+  for (let i = 0; i < W / 3; i++) px(ctx, Math.round(r() * W), gy + 1 + Math.floor(r() * 13), 1, 1, N(B.flowers[Math.floor(r() * 3)]));
   drawTree(ctx, 16, gy + 1, 2, B, 'rond', night); drawTree(ctx, W - 20, gy + 1, 2, B, 'pin', night);
   const st = homeStage(lvl);
   drawHome(ctx, Math.round(W / 2), gy + 1, st, night, N);
