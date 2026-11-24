@@ -365,7 +365,7 @@ function statHead(k, snap){
   const s = STATS.find(x => x.k === k), l = snap.lv[k];
   return `<a class="back" href="#fiche">‹ Fiche</a>
   <div class="row">${ico(k)}<div class="grow"><div class="ttl big">${s.name} · Niv. ${l.lvl}</div>
-  <div class="num" style="font-size:22px;color:var(--${k})">${l.xp} XP au total</div><div class="num muted" style="font-size:19px">${l.into} / ${l.cost} XP vers le niveau ${l.lvl+1}</div></div></div>${bar(l.into/l.cost, k)}`;
+  <div class="num" style="font-size:22px;color:var(--${k})">${l.xp} XP au total</div><div class="num muted" style="font-size:19px">${l.into} / ${l.cost} XP vers le niveau ${l.lvl+1}</div></div></div>${bar(l.into/l.cost, k)}<!--/tete-->`;
 }
 function journal(k, snap, n=12){
   const ev = snap.ev.filter(e => e.stat === k).sort((a,b) => b.date.localeCompare(a.date)).slice(0, n);
@@ -413,7 +413,7 @@ const doneToday = () => S.workouts.find(w => w.date === today());
 
 /* ================= Écrans ================= */
 // Sur Quêtes et Fiche, la liste défile dans sa propre zone (85 % du haut de l'écran)
-const scroller = () => document.body.classList.contains('has-scene') ? (document.querySelector('.pane-scroll') || document.getElementById('app')) : (document.scrollingElement || document.documentElement);
+const scroller = () => document.querySelector('.pane-scroll') || document.scrollingElement || document.documentElement;
 function dailyDone(t = today()){
   const w = S.workouts.some(x => x.date === t), rest = S.rest.includes(t);
   const pagesT = S.pages.filter(p => p.date === t).reduce((a,p) => a + p.n, 0);
@@ -715,7 +715,7 @@ function viewVitalite(snap){
    <div class="row">${ico('vit')}<div class="grow"><div class="ttl big">Ravitaillement</div>
      <div class="ttl" style="font-size:16px;color:var(--vit);margin-top:6px">${tierTxt(tr)}</div>
      <div class="muted small">${tr ? `Moyenne ${tr.avg.toFixed(2).replace('.', ',')} sur ${tr.n} jour${tr.n>1?'s':''} noté${tr.n>1?'s':''} (30 derniers jours)` : 'Note ta première journée pour obtenir un rang'}</div>
-     <div class="num" style="font-size:19px">${ka ? `${ka.avg} kcal/jour en moyenne (${ka.n} j saisis)` : 'Pas encore de calories saisies'}</div></div></div>
+     <div class="num" style="font-size:19px">${ka ? `${ka.avg} kcal/jour en moyenne (${ka.n} j saisis)` : 'Pas encore de calories saisies'}</div></div></div><!--/tete-->
    <div class="win"><div class="qt">Qualité du jour</div>${gradeRow(t)}
      <div class="qt" style="margin-top:8px">Total du jour</div>
      <div class="row"><input class="mid" type="number" inputmode="numeric" min="0" step="50" placeholder="kcal" value="${kc}" data-in="kcal"><span class="muted">kcal · objectif ${RULES.kcalSeuil}</span></div>
@@ -747,7 +747,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.3</div>`;
+   <div class="muted small center">Life RPG · prototype v1.3.1</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -767,10 +767,13 @@ function render(){
   const snap = snapshot(), r = route();
   persoLvl = snap.perso;
   document.body.classList.toggle('has-scene', r === 'jour' || r === 'fiche'); document.body.dataset.route = r;
-  document.documentElement.classList.toggle('locked', r === 'jour' || r === 'fiche');
   const y = scroller().scrollTop;
   let html = VIEWS[r](snap, routeArg());
-  if (!html.trimStart().startsWith('<a class="back"') && (r === 'force' || r === 'savoir')) html = `<a class="back" href="#fiche">‹ Fiche</a>` + html;
+  // Pages d'attribut : l'en-tête (nom, niveau, XP) reste fixe, seul le contenu dessous défile
+  const cut = html.indexOf('<!--/tete-->');
+  if (cut > 0) html = `<div class="pane-head">${html.slice(0, cut)}</div><div class="pane-scroll"><div class="pane-inner">${html.slice(cut + 12)}</div></div>`;
+  document.body.classList.toggle('paned', cut > 0 || r === 'jour' || r === 'fiche');
+  document.documentElement.classList.toggle('locked', cut > 0 || r === 'jour' || r === 'fiche');
   document.getElementById('app').innerHTML = html;
   drawWorld(r, snap);
   const parent = {force:'fiche', savoir:'fiche', sagesse:'fiche', strategie:'fiche', vitalite:'fiche', reglages:'fiche'}[r] || r;
