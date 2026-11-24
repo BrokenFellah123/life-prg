@@ -20,7 +20,9 @@ const RULES = {
   absenceRetour: 3,    // jours d'absence avant la quête « Retour » (XP du jour ×2)
   objectifPages: 10,
   queteDemain: 20,
-  proteine: 10,       // boisson protéinée après la séance     // XP d'une quête du lendemain réussie
+  proteine: 10,
+  course: 5,         // course avant / après la séance (chacune)
+        // boisson protéinée après la séance     // XP d'une quête du lendemain réussie
 };
 
 const STATS = [
@@ -127,6 +129,19 @@ function migrate14(){
   if (S.cur && LEGACY[S.cur.type] && !Object.values(S.cur.ex).some(e => e.sets.some(x => x))) S.cur = null;
   S.mig14 = true; save();
 }
+function fixCur(){
+  // Séance commencée avec l'ancien programme (Haut A / Bas / Haut B) : terminée telle quelle si des séries sont cochées, sinon effacée.
+  const LMAP = {A:'HA', B:'HB', L:'BA'};
+  for (const k in LMAP) if (S.prog && S.prog[k]){   // exercices ajoutés par erreur dans une ancienne séance → nouvelle séance correspondante
+    const P = S.prog[LMAP[k]] = S.prog[LMAP[k]] || {ex:[]};
+    for (const e of S.prog[k].ex) if (!P.ex.some(x => x[0] === e[0])) P.ex.push(e);
+    delete S.prog[k];
+  }
+  if (S.cur && LEGACY[S.cur.type]){
+    if (Object.values(S.cur.ex).some(e => e.sets.some(x => x))) finishSession(); else S.cur = null;
+    save();
+  }
+}
 function save(){ localStorage.setItem(KEY, JSON.stringify(S)); }
 
 /* ================= Moteur d'XP ================= */
@@ -167,6 +182,10 @@ function computeEvents(){
   for (const w of ws){
     push(w.date, 'for', RULES.seance, `Séance ${sessName(w.type)}`);
     if (w.prot) push(w.date, 'for', RULES.proteine, 'Boisson protéinée après la séance');
+    if (SESS.some(x => x[0] === w.type) && w.run){   // ancienne course fixe : pas d'XP rétroactive
+      if (w.run[0]) push(w.date, 'for', RULES.course, 'Course avant la séance');
+      if (w.run[1]) push(w.date, 'for', RULES.course, 'Course après la séance');
+    }
     const wk = weekKey(w.date); perWeek[wk] = (perWeek[wk]||0) + 1;
     if (perWeek[wk] === 4) push(w.date, 'for', RULES.semaine4, 'Bonus semaine : 4 séances');
     for (const id in w.ex){
@@ -437,6 +456,13 @@ const FLASK = (() => { const g = ['..XXX..','..XcX..','..XXX..','.XoooX.','Xooho
   const col = {X:'#1a1222', c:'#d9a35a', o:'#9a6234', h:'#c98a4a', O:'#6e4220'}; let r = '';
   g.forEach((row, y) => [...row].forEach((ch, x) => { if (col[ch]) r += `<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="${col[ch]}"/>`; }));
   return `<svg width="21" height="27" viewBox="0 0 7 9" style="shape-rendering:crispEdges;flex:0 0 auto" aria-hidden="true">${r}</svg>`; })();
+// Petit sentier de terre qui serpente dans l'herbe, pixel art
+const PATH = (() => { const g = ['GGGGdGG','GGGddGG','GGddGgG','GddGGGG','GdddGGG','GGgddGG','GGGGddG','GgGGddG','GGGddGG'];
+  const col = {G:'#3f7a3a', g:'#5fa04e', d:'#c9a06a'}; let r = '';
+  g.forEach((row, y) => [...row].forEach((ch, x) => { r += `<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="${col[ch]}"/>`; }));
+  return `<svg width="21" height="27" viewBox="0 0 7 9" style="shape-rendering:crispEdges;flex:0 0 auto;outline:1px solid #1a1222" aria-hidden="true">${r}</svg>`; })();
+const runRow = (i, on) => `<div class="row">${check(on, 'run', `data-i="${i}"`)}${PATH}<span class="grow">Course ${i ? 'après' : 'avant'} la séance</span><span class="xp">+${RULES.course}</span></div>`;
+const bonusXP = w => (w.prot ? RULES.proteine : 0) + (SESS.some(x => x[0] === w.type) && w.run ? (w.run[0] ? RULES.course : 0) + (w.run[1] ? RULES.course : 0) : 0);
 const protRow = on => `<div class="row">${check(on, 'prot')}${FLASK}<span class="grow">Boisson protéinée après la séance</span><span class="xp">+${RULES.proteine}</span></div>`;
 
 /* ================= Écrans ================= */
@@ -611,9 +637,9 @@ function viewForce(snap){
   let sess;
   if (w && !S.cur){
     sess = `<div class="sec">Séance du jour · ${sessName(w.type)}</div><div class="win flat">
-      <div class="ttl" style="color:var(--vit)">SÉANCE TERMINÉE · +${RULES.seance + (w.prot ? RULES.proteine : 0)} XP</div>
+      <div class="ttl" style="color:var(--vit)">SÉANCE TERMINÉE · +${RULES.seance + bonusXP(w)} XP</div>
       ${Object.entries(w.ex).map(([id,e]) => `<div class="row small"><span class="grow">${esc((exDef(id) || [, '?'])[1])}</span><span class="num">${(exDef(id) || [])[4]==='simple' ? '✓ fait' : ((exDef(id) || [])[4]==='sec'?'':kgTxt(e.kg)+' kg')+' '+e.sets.map(x=>x===1?'■':x===2?'×':'□').join('')}</span></div>`).join('')}
-      ${protRow(!!w.prot)}
+      ${runRow(0, !!(w.run && w.run[0]))}${runRow(1, !!(w.run && w.run[1]))}${protRow(!!w.prot)}
       <button class="btn sm ghost" data-act="undoWorkout">Annuler cette séance</button></div>`;
   } else {
     const c = S.cur || {type: nextType(), date:t, ex:null, run:[false,false]};
@@ -640,16 +666,17 @@ function viewForce(snap){
       <input placeholder="Nom de l'exercice" data-in="exname" list="exnames" maxlength="60"><datalist id="exnames">${names}</datalist>
       <div class="row"><input class="mid" type="number" inputmode="numeric" min="1" max="10" value="3" data-in="exsets"><span class="muted">séries</span>
         <input class="mid" type="number" inputmode="numeric" min="1" max="300" value="8" data-in="exreps"><span class="muted">reps</span></div>
-      <div class="row"><select class="sel" data-in="exkind"><option value="">Charge en kg</option><option value="lest">Lest (poids du corps + kg)</option><option value="sec">Durée (les « reps » sont des secondes)</option><option value="simple">Simple : juste à valider (ex. course)</option></select></div>
+      <div class="row"><select class="sel" data-in="exkind"><option value="">Charge en kg</option><option value="lest">Lest (poids du corps + kg)</option><option value="sec">Durée (les « reps » sont des secondes)</option><option value="simple">Simple : juste à valider</option></select></div>
       <button class="btn pri" data-act="exAdd" data-t="${c.type}">Ajouter l'exercice</button>
       <div class="muted small">L'exercice reste dans cette séance pour les prochaines fois. Même nom qu'un exercice déjà fait = son historique et sa dernière charge sont repris.</div></div>`;
     sess = `<div class="sec">Séance du jour · ${sessName(c.type)}${c.date !== t ? ` (commencée le ${shortDate(c.date)})` : ''}</div>
      <div class="seg2">${types}</div>
      <div class="win flat">
       <div class="muted small">La charge reprend ta dernière saisie : change-la si tu veux augmenter. « Valider » = toutes les séries réussies. « Raté » = fait, mais pas toutes les reps (ne compte pas pour un record).</div>
+      ${runRow(0, !!(c.run && c.run[0]))}
       ${exs || `<div class="muted">Séance vide. Ajoute tes exercices juste en dessous : ils resteront dans « ${esc(sessName(c.type))} ».</div>`}
-      ${protRow(!!c.prot)}
-      <button class="btn pri" data-act="finish">Terminer la séance · +${RULES.seance + (c.prot ? RULES.proteine : 0)} XP</button>
+      ${runRow(1, !!(c.run && c.run[1]))}${protRow(!!c.prot)}
+      <button class="btn pri" data-act="finish">Terminer la séance · +${RULES.seance + bonusXP(c)} XP</button>
       ${S.cur ? `<button class="btn sm ghost" data-act="abandon">Effacer la séance en cours</button>` : ''}
      </div>${addEx}`;
   }
@@ -780,13 +807,13 @@ function viewReglages(){
    <div class="win flat col"><div class="qt">Nom du personnage</div><input value="${esc(S.name)}" data-in="name"></div>
    <div class="win flat col"><div class="qt">Règles actuelles</div><div class="muted small">
      Niveau n d'une stat : 100 × n XP. Niveau perso : somme des niveaux Force, Savoir, Sagesse, Stratégie ÷ 4.<br>
-     Force : ${RULES.seance} XP/séance (+${RULES.proteine} avec la boisson protéinée) (charges gérées par toi, préremplies avec la dernière saisie), +${RULES.semaine4} à la 4e séance de la semaine, +${RULES.record} par record (charge plus lourde avec toutes les séries réussies).<br>
+     Force : ${RULES.seance} XP/séance (+${RULES.course} par course avant, +${RULES.course} par course après, +${RULES.proteine} avec la boisson protéinée) (charges gérées par toi, préremplies avec la dernière saisie), +${RULES.semaine4} à la 4e séance de la semaine, +${RULES.record} par record (charge plus lourde avec toutes les séries réussies).<br>
      Savoir : ${RULES.pomo} XP par 25 min de révision, ${RULES.etapeCours} XP par étape de cours (lu, appris, quiz, maîtrisé), +${RULES.examen} par examen. Sagesse : ${RULES.page} XP/page, +${RULES.livre} par livre.<br>
      Stratégie : ${RULES.puzzles} XP par série de 10 puzzles. Ravitaillement : pas d'XP ; rang = moyenne de tes notes C/B/A/S sur 30 jours (jours sans note ignorés), lettre la plus proche. Il change l'allure du personnage.<br>
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.4</div>`;
+   <div class="muted small center">Life RPG · prototype v1.4.1</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -911,9 +938,11 @@ const ACTS = {
   delExam(el){ const x = S.exams.find(x => x.id === el.dataset.id); if (x && sure(el, `Supprimer l'examen « ${x.name} » ?`)) S.exams = S.exams.filter(y => y !== x); },
   exOk(el){ const e = ensureCur().ex[el.dataset.id]; const on = e.sets.every(x => x === 1); e.sets = e.sets.map(() => on ? 0 : 1); },
   exKo(el){ const e = ensureCur().ex[el.dataset.id]; const on = e.sets.some(x => x === 2); e.sets = e.sets.map((x,i) => on ? 0 : (i === e.sets.length-1 ? 2 : 1)); },
-  run(el){ const c = ensureCur(); c.run[+el.dataset.i] = !c.run[+el.dataset.i]; },
+  run(el){ const i = +el.dataset.i, w = doneToday();
+    if (w && !S.cur){ w.run = w.run || [false,false]; w.run[i] = !w.run[i]; if (w.run[i]) toast(`+${RULES.course} XP Force`); }
+    else { const c = ensureCur(); c.run = c.run || [false,false]; c.run[i] = !c.run[i]; } },
   type(el){ const c = S.cur; if (c && Object.values(c.ex).some(e => e.sets.some(x => x)) && !sure(el, 'Changer de séance efface les séries cochées. Continuer ?', 'Oui, changer')) return; setCurType(el.dataset.t); },
-  finish(){ ensureCur(); const w = finishSession(); if (w) { toast(`Séance terminée ! +${RULES.seance + (w.prot ? RULES.proteine : 0)} XP`); scroller().scrollTop = 0; } },
+  finish(){ ensureCur(); const w = finishSession(); if (w) { toast(`Séance terminée ! +${RULES.seance + bonusXP(w)} XP`); scroller().scrollTop = 0; } },
   prot(){ const w = doneToday(); if (w && !S.cur){ w.prot = !w.prot; if (w.prot) toast(`+${RULES.proteine} XP Force`); } else { const c = ensureCur(); c.prot = !c.prot; } },
   exAdd(el){
     const t = el.dataset.t, name = val('exname'); if (!name) return toast("Nom de l'exercice ?");
@@ -985,7 +1014,7 @@ document.addEventListener('change', e => {
   else if (k === 'name'){ S.name = el.value.trim() || 'Boss'; }
   else if (k === 'import'){
     const f = el.files[0]; if (!f) return;
-    f.text().then(txt => { try { const d = JSON.parse(txt); if (!d || d.v !== 1) throw 0; S = Object.assign(blank(), d); S.mig06 = false; migrate(); S.mig14 = false; migrate14(); lastLevels = null; commit(); toast('Sauvegarde importée'); } catch { toast('Fichier invalide'); } });
+    f.text().then(txt => { try { const d = JSON.parse(txt); if (!d || d.v !== 1) throw 0; S = Object.assign(blank(), d); S.mig06 = false; migrate(); S.mig14 = false; migrate14(); fixCur(); lastLevels = null; commit(); toast('Sauvegarde importée'); } catch { toast('Fichier invalide'); } });
     return;
   }
   else return;   // champs de saisie libre (nom de cours…) : lus au clic sur le bouton
@@ -1010,5 +1039,5 @@ setInterval(() => {
   el.innerHTML = avatarSVG(st, 72, S.outfit, pose, tr); el.classList.add(hop);
   setTimeout(() => { el.classList.remove(hop); if (document.getElementById('hero') === el) el.innerHTML = avatarSVG(st, 72); }, 900);
 }, 20000);
-load(); migrate(); migrate14(); render();
+load(); migrate(); migrate14(); fixCur(); render();
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) navigator.serviceWorker.register('sw.js', {updateViaCache:'none'});
