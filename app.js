@@ -602,7 +602,7 @@ function tomorrowWin(){
 }
 function weekWin(){
   const wk = weekKey(today()); const n = S.workouts.filter(w => weekKey(w.date) === wk).length;
-  return `<div class="win flat row"><div class="grow"><div class="qt">Cette semaine</div><div class="muted small">Muscu ${Math.min(n,4)}/4 séances · la 4e donne +${RULES.semaine4} XP bonus</div></div><span class="ttl big">${Math.min(n,4)}/4</span></div>`;
+  return `<div class="win flat row"><div class="grow"><div class="qt">Quête de la semaine</div><div class="muted small">Muscu ${Math.min(n,4)}/4 séances · la 4e donne +${RULES.semaine4} XP bonus<br>Du lundi ${shortDate(wk)} au dimanche ${shortDate(addDays(wk, 6))} · repart à 0 lundi</div></div><span class="ttl big">${Math.min(n,4)}/4</span></div>`;
 }
 
 function viewFiche(snap){
@@ -825,7 +825,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.5.1</div>`;
+   <div class="muted small center">Life RPG · prototype v1.5.2</div>`;
 }
 
 /* ================= Rendu et routage ================= */
