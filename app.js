@@ -521,9 +521,9 @@ function fold(id, title, body){
 function mqCount(type){ const l = (S.mquests || []).filter(q => q.type === type); return l.length ? ` · ${l.filter(q => q.done).length}/${l.length}` : ''; }
 function mqList(type){
   const l = (S.mquests || []).filter(q => q.type === type);
-  const items = l.map(q => `<div class="quest ${q.done?'dn':''}">${check(!!q.done, 'mqDone', `data-id="${q.id}"`)}<div class="grow col">
+  const items = l.map(q => `<div class="quest has-x ${q.done?'dn':''}"><button class="xdel" data-act="mqDel" data-id="${q.id}" aria-label="Supprimer">✕</button>${check(!!q.done, 'mqDone', `data-id="${q.id}"`)}<div class="grow col">
      <div class="row"><span class="grow qt name">${esc(q.text)}</span>${q.xp ? `<span class="xp">+${q.xp}</span>` : ''}</div>
-     <div class="row">${q.stat ? `<span class="chip" style="background:var(--${q.stat})">${STATS.find(x=>x.k===q.stat).abbr}</span>` : ''}<span class="grow muted small">${q.done ? `Réussie le ${shortDate(q.done)}` : ''}</span><button class="btn sm ghost" data-act="mqDel" data-id="${q.id}">×</button></div></div></div>`).join('');
+     <div class="row">${q.stat ? `<span class="chip" style="background:var(--${q.stat})">${STATS.find(x=>x.k===q.stat).abbr}</span>` : ''}<span class="grow muted small">${q.done ? `Réussie le ${shortDate(q.done)}` : ''}</span></div></div></div>`).join('');
   return `${items || `<div class="muted small">Aucune quête pour l'instant.</div>`}
     <div class="win flat col"><input placeholder="Nouvelle quête ${type === 'main' ? 'principale' : 'secondaire'}" data-in="mq-${type}" maxlength="120">
     <div class="row"><select data-in="mqs-${type}" class="sel">${STATS.filter(x => x.k !== 'vit').map(x => `<option value="${x.k}">${x.name}</option>`).join('')}</select>
@@ -536,9 +536,9 @@ function gradeRow(d){
 }
 function tomorrowWin(){
   const d = addDays(today(), 1), tq = (S.tquests || []).find(x => x.date === d);
-  if (tq) return `<div class="win flat"><div class="ttl" style="font-size:9px;color:var(--accent)">QUÊTE DE DEMAIN</div>
+  if (tq) return `<div class="win flat has-x"><button class="xdel" data-act="tqRemove" data-id="${tq.id}" aria-label="Supprimer">✕</button><div class="ttl" style="font-size:9px;color:var(--accent)">QUÊTE DE DEMAIN</div>
     <div class="row"><span class="chip" style="background:var(--${tq.stat})">${STATS.find(x=>x.k===tq.stat).abbr}</span><span class="grow name">${esc(tq.text)}</span><span class="xp">+${RULES.queteDemain}</span></div>
-    <button class="btn sm ghost" data-act="tqDel" data-id="${tq.id}">Modifier / supprimer</button></div>`;
+    <button class="btn sm ghost" data-act="tqDel" data-id="${tq.id}">Modifier</button></div>`;
   return `<div class="win flat col"><div class="ttl" style="font-size:9px;color:var(--accent)">ÉCRIRE LA QUÊTE DE DEMAIN</div>
     <div class="muted small">Une tâche précise pour demain. Réussie demain : +${RULES.queteDemain} XP dans la stat choisie.</div>
     <input placeholder="Ex. lire 100 pages de Karamazov" data-in="tqtext" maxlength="120">
@@ -643,25 +643,25 @@ function viewSavoir(snap, arg){
   const path = []; for (let f = S.folders.find(x => x.id === fid); f; f = S.folders.find(x => x.id === f.parent)) path.unshift(f);
   const crumbs = `<div class="row wrap" style="gap:4px"><a class="link" href="#savoir">Tous les cours</a>${path.map(f => ` <span class="muted">›</span> <a class="link" href="#savoir/${f.id}">${esc(f.name)}</a>`).join('')}</div>`;
   const folders = S.folders.filter(f => f.parent === fid).sort((a,b) => a.name.localeCompare(b.name, 'fr')).map(f => { const st = folderStats(f.id);
-    return `<div class="ex"><div class="row"><a href="#savoir/${f.id}" class="row grow" style="color:inherit;text-decoration:none"><span class="ttl" style="color:var(--sav)">▣</span><span class="grow name">${esc(f.name)}</span><span class="num muted">${st.done}/${st.tot}</span><span class="ttl">›</span></a></div></div>`; }).join('');
+    return `<div class="ex has-x"><button class="xdel" data-act="delFolder" data-id="${f.id}" aria-label="Supprimer">✕</button><div class="row"><a href="#savoir/${f.id}" class="row grow" style="color:inherit;text-decoration:none"><span class="ttl" style="color:var(--sav)">▣</span><span class="grow name">${esc(f.name)}</span><span class="num muted">${st.done}/${st.tot}</span><span class="ttl">›</span></a></div></div>`; }).join('');
   const courses = S.courses.filter(c => (c.folder || null) === fid).map(c => {
     const steps = STEPS.map(([k,l]) => `<button class="step ${c.steps[k]?'on':''}" data-act="step" data-id="${c.id}" data-k="${k}">${l}</button>`).join('');
     const n = Object.values(c.steps).filter(Boolean).length;
-    return `<div class="ex"><div class="row" style="align-items:flex-start"><span class="grow name">${esc(c.name)}</span><span class="num muted">${n}/4</span></div>
+    return `<div class="ex has-x"><button class="xdel" data-act="delCourse" data-id="${c.id}" aria-label="Supprimer">✕</button><div class="row" style="align-items:flex-start"><span class="grow name">${esc(c.name)}</span><span class="num muted">${n}/4</span></div>
       <div class="steps">${steps}</div>
-      <div class="row">${c.url ? `<a class="link" href="${esc(c.url)}" target="_blank" rel="noopener">Ouvrir le cours ↗</a>` : `<span class="muted small">Pas de lien</span>`}<span class="grow"></span><button class="btn sm ghost" data-act="delCourse" data-id="${c.id}">Suppr.</button></div></div>`;
+      <div class="row">${c.url ? `<a class="link" href="${esc(c.url)}" target="_blank" rel="noopener">Ouvrir le cours ↗</a>` : `<span class="muted small">Pas de lien</span>`}</div></div>`;
   }).join('');
   const here = fid ? S.folders.find(f => f.id === fid).name : 'Tous les cours';
-  const exams = S.exams.map(x => `<div class="row" style="padding:6px 0"><span class="grow name">${esc(x.name)}</span>
+  const exams = S.exams.map(x => `<div class="row has-x" style="padding:6px 34px 6px 0"><button class="xdel" data-act="delExam" data-id="${x.id}" aria-label="Supprimer">✕</button><span class="grow name">${esc(x.name)}</span>
      ${x.passed ? `<span class="chip">RÉUSSI ${shortDate(x.passed)}</span><button class="btn sm ghost" data-act="examUndo" data-id="${x.id}">↺</button>`
-                : `<button class="btn sm" data-act="examOk" data-id="${x.id}">Réussi · +${RULES.examen}</button><button class="btn sm ghost" data-act="delExam" data-id="${x.id}">×</button>`}</div>`).join('');
+                : `<button class="btn sm" data-act="examOk" data-id="${x.id}">Réussi · +${RULES.examen}</button>`}</div>`).join('');
   const pomo = S.pomo[t] || 0;
   return `${statHead('sav', snap)}
    <div class="win flat"><div class="qt">Révision aujourd'hui · ${pomo} × 25 min</div><div class="muted small">+${RULES.pomo} XP par bloc de 25 min</div>${pomoRow(pomo, false)}</div>
    <div class="sec">Mes cours · ${RULES.etapeCours} XP par étape</div>
    ${crumbs}
    <div class="win flat">${folders + courses || '<div class="muted small">Dossier vide. Ajoute un dossier ou un cours ci-dessous.</div>'}
-     ${fid ? `<button class="btn sm danger" data-act="delFolder" data-id="${fid}">Supprimer le dossier « ${esc(here)} »</button>` : ''}</div>
+</div>
    <div class="win flat col"><div class="ttl" style="font-size:9px">NOUVEAU DOSSIER DANS « ${esc(here).toUpperCase()} »</div>
      <div class="row"><input placeholder="Nom du dossier" data-in="fname"><button class="btn sm" data-act="addFolder" data-f="${fid || ''}">Créer</button></div></div>
    <div class="win flat col"><div class="ttl" style="font-size:9px">NOUVEAU COURS DANS « ${esc(here).toUpperCase()} »</div>
@@ -687,7 +687,7 @@ function viewSagesse(snap){
   return `${statHead('sag', snap)}
    <div class="sec">En cours · ${RULES.page} XP par page</div>
    <div class="win flat">${books || '<div class="muted small">Aucun livre en cours.</div>'}</div>
-   ${todayLogs.length ? `<div class="win flat"><div class="ttl" style="font-size:9px">AUJOURD'HUI</div>${todayLogs.map(p => `<div class="row small"><span class="grow">${p.n} pages · ${esc((S.books.find(b=>b.id===p.book)||{}).title||'')}</span><button class="btn sm ghost" data-act="delPages" data-id="${p.id}">×</button></div>`).join('')}</div>` : ''}
+   ${todayLogs.length ? `<div class="win flat"><div class="ttl" style="font-size:9px">AUJOURD'HUI</div>${todayLogs.map(p => `<div class="row small has-x" style="padding:6px 34px 6px 0"><span class="grow">${p.n} pages · ${esc((S.books.find(b=>b.id===p.book)||{}).title||'')}</span><button class="xdel" data-act="delPages" data-id="${p.id}" aria-label="Supprimer">✕</button></div>`).join('')}</div>` : ''}
    <div class="win flat col"><div class="ttl" style="font-size:9px">AJOUTER UN LIVRE</div>
      <input placeholder="Titre" data-in="btitle"><input type="number" inputmode="numeric" placeholder="Nombre de pages (facultatif)" data-in="btotal">
      <button class="btn" data-act="addBook">Ajouter</button></div>
@@ -747,7 +747,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.2.9</div>`;
+   <div class="muted small center">Life RPG · prototype v1.3</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -826,7 +826,8 @@ const ACTS = {
     if (!xp) return toast('Indique l\'XP (de 1 à 100)');
     S.mquests = S.mquests || []; S.mquests.push({id: uid(), type: t, text, stat: val('mqs-' + t) || 'sag', xp, done: null}); toast('Quête créée'); },
   mqDone(el){ const q = (S.mquests || []).find(x => x.id === el.dataset.id); if (q) q.done = q.done ? null : today(); },
-  mqDel(el){ S.mquests = (S.mquests || []).filter(x => x.id !== el.dataset.id); },
+  mqDel(el){ const q = (S.mquests || []).find(x => x.id === el.dataset.id); if (q && sure(el, `Supprimer la quête « ${q.text} » ?${q.done ? ' Son XP part avec.' : ''}`)) S.mquests = S.mquests.filter(x => x !== q); },
+  tqRemove(el){ const q = (S.tquests || []).find(x => x.id === el.dataset.id); if (q && sure(el, `Supprimer la quête de demain « ${q.text} » ?`)) S.tquests = S.tquests.filter(x => x !== q); },
   grade(el){ S.grade = S.grade || {}; const d = el.dataset.d, g = el.dataset.g;
     if (S.grade[d] === g) delete S.grade[d]; else { S.grade[d] = g; { const tr = tierOf(); toast(`${g} ${GEMO[g]} noté · rang ${tr.letter}-tier ${GEMO[tr.letter]}`); }; } },
   sound(){ S.sound = S.sound === false; if (S.sound) setTimeout(() => play('quete'), 50); },
@@ -840,7 +841,7 @@ const ACTS = {
     const n = parseInt(val(el.dataset.id ? 'pg-'+id : 'pagesq')); if (!(n > 0)) return toast('Nombre de pages ?');
     S.pages.push({id:uid(), date:today(), book:id, n}); toast(`+${n} XP Sagesse`);
   },
-  delPages(el){ S.pages = S.pages.filter(p => p.id !== el.dataset.id); },
+  delPages(el){ const p = S.pages.find(p => p.id === el.dataset.id); if (p && sure(el, `Supprimer ces ${p.n} pages et leur XP ?`)) S.pages = S.pages.filter(x => x !== p); },
   addBook(){ const title = val('btitle'); if (!title) return toast('Titre ?'); S.books.push({id:uid(), title, total: parseInt(val('btotal')) || 0, done:null}); },
   finishBook(el){ const b = S.books.find(b => b.id === el.dataset.id); b.done = today(); toast(`Livre fini ! +${RULES.livre} XP`); },
   unfinishBook(el){ S.books.find(b => b.id === el.dataset.id).done = null; },
@@ -853,27 +854,27 @@ const ACTS = {
   delFolder(el){
     const ids = []; const walk = id => { ids.push(id); S.folders.filter(f => f.parent === id).forEach(f => walk(f.id)); }; walk(el.dataset.id);
     const nc = S.courses.filter(c => ids.includes(c.folder)).length, nf = ids.length - 1;
-    const msg = nc || nf ? `Ce dossier contient ${nc} cours et ${nf} sous-dossier(s). Tout supprimer, avec l'XP de ces cours ?` : 'Supprimer ce dossier vide ?';
-    if (!confirm(msg)) return;
-    const parent = S.folders.find(f => f.id === el.dataset.id).parent;
+    const f0 = S.folders.find(f => f.id === el.dataset.id); if (!f0) return;
+    const msg = nc || nf ? `Supprimer le dossier « ${f0.name} » ? Il contient ${nc} cours et ${nf} sous-dossier(s), qui partent avec, ainsi que l'XP de ces cours.` : `Supprimer le dossier « ${f0.name} » ?`;
+    if (!sure(el, msg)) return;
     S.folders = S.folders.filter(f => !ids.includes(f.id)); S.courses = S.courses.filter(c => !ids.includes(c.folder));
-    location.hash = parent ? 'savoir/' + parent : 'savoir';
+    if (ids.includes(routeArg())) location.hash = f0.parent ? 'savoir/' + f0.parent : 'savoir';
   },
-  delCourse(el){ if (confirm('Supprimer ce cours et son XP ?')) S.courses = S.courses.filter(c => c.id !== el.dataset.id); },
+  delCourse(el){ const c = S.courses.find(c => c.id === el.dataset.id); if (c && sure(el, `Supprimer le cours « ${c.name} » et son XP ?`)) S.courses = S.courses.filter(x => x !== c); },
   step(el){ const c = S.courses.find(c => c.id === el.dataset.id), k = el.dataset.k;
     if (c.steps[k]) { c.steps[k] = null; } else { c.steps[k] = today(); toast(`+${RULES.etapeCours} XP Savoir`); } },
   addExam(){ const name = val('ename'); if (!name) return toast('Nom de l\'examen ?'); S.exams.push({id:uid(), name, passed:null}); },
   examOk(el){ S.exams.find(x => x.id === el.dataset.id).passed = today(); toast(`Examen réussi ! +${RULES.examen} XP`); },
   examUndo(el){ S.exams.find(x => x.id === el.dataset.id).passed = null; },
-  delExam(el){ S.exams = S.exams.filter(x => x.id !== el.dataset.id); },
+  delExam(el){ const x = S.exams.find(x => x.id === el.dataset.id); if (x && sure(el, `Supprimer l'examen « ${x.name} » ?`)) S.exams = S.exams.filter(y => y !== x); },
   exOk(el){ const e = ensureCur().ex[el.dataset.id]; const on = e.sets.every(x => x === 1); e.sets = e.sets.map(() => on ? 0 : 1); },
   exKo(el){ const e = ensureCur().ex[el.dataset.id]; const on = e.sets.some(x => x === 2); e.sets = e.sets.map((x,i) => on ? 0 : (i === e.sets.length-1 ? 2 : 1)); },
   run(el){ const c = ensureCur(); c.run[+el.dataset.i] = !c.run[+el.dataset.i]; },
-  type(el){ const c = S.cur; if (c && Object.values(c.ex).some(e => e.sets.some(x => x)) && !confirm('Changer de séance efface les séries cochées. Continuer ?')) return; setCurType(el.dataset.t); },
+  type(el){ const c = S.cur; if (c && Object.values(c.ex).some(e => e.sets.some(x => x)) && !sure(el, 'Changer de séance efface les séries cochées. Continuer ?', 'Oui, changer')) return; setCurType(el.dataset.t); },
   finish(){ ensureCur(); const w = finishSession(); if (w) { toast(`Séance terminée ! +${RULES.seance} XP`); scroller().scrollTop = 0; } },
-  abandon(){ if (confirm('Effacer la séance en cours ?')) S.cur = null; },
-  undoWorkout(){
-    const w = doneToday(); if (!w || !confirm('Annuler la séance du jour ? Tu pourras la refaire.')) return;
+  abandon(el){ if (sure(el, 'Effacer la séance en cours ?', 'Oui, effacer')) S.cur = null; },
+  undoWorkout(el){
+    const w = doneToday(); if (!w || !sure(el, 'Annuler la séance du jour ? Tu pourras la refaire.', 'Oui, annuler')) return;
     S.workouts = S.workouts.filter(x => x !== w);
     S.cur = {date:w.date, pos:w.pos, type:w.type, run:w.run, ex:{}};
     for (const [id,,n] of PROGRAM[w.type].ex) S.cur.ex[id] = w.ex[id] ? {kg:w.ex[id].kg, sets:[...w.ex[id].sets]} : {kg:S.loads[id] ?? null, sets:Array(n).fill(0)};
@@ -890,10 +891,26 @@ const ACTS = {
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   },
-  reset(){ if (confirm('Tout effacer ? Exporte une sauvegarde avant si tu veux la garder.') && confirm('Vraiment tout effacer ?')) { S = blank(); lastLevels = null; } },
+  reset(el){ if (sure(el, 'Tout effacer ? Toutes tes données partent, sans retour. Exporte une sauvegarde avant si tu veux la garder.', 'Oui, tout effacer')) { S = blank(); lastLevels = null; } },
 };
+/* Fenêtre de confirmation (style de l'appli) : Oui en rouge, Non en vert */
+function sure(el, msg, yes = 'Oui, supprimer'){
+  if (el && el._ok) { el._ok = false; return true; }   // deuxième passage, après « Oui »
+  document.querySelector('.modal')?.remove();
+  const m = document.createElement('div'); m.className = 'modal';
+  m.innerHTML = `<div class="win dlg"><div class="ttl" style="color:var(--accent)">CONFIRMER</div><div class="dmsg">${esc(msg)}</div>
+    <div class="row"><button class="btn no grow">Non</button><button class="btn yes grow">${esc(yes)}</button></div></div>`;
+  const close = () => m.remove();
+  m.addEventListener('click', ev => {
+    ev.stopPropagation(); ev.preventDefault();
+    if (ev.target.closest('.yes')){ close(); el._ok = true; const before = snapshot(); ACTS[el.dataset.act](el); commit(); feedback(before); }
+    else if (ev.target.closest('.no') || ev.target === m) close();
+  });
+  document.body.appendChild(m); setTimeout(() => m.querySelector('.no').focus(), 0);
+  return false;
+}
 document.addEventListener('click', e => {
-  const el = e.target.closest('[data-act]'); if (!el || el.disabled) return;
+  const el = e.target.closest('[data-act]'); if (!el || el.disabled || el.closest('.modal')) return;
   e.preventDefault(); const before = snapshot(); ACTS[el.dataset.act]?.(el); commit(); feedback(before);
 });
 document.addEventListener('change', e => {
