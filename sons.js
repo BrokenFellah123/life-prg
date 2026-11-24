@@ -47,6 +47,27 @@ function noise({t = 0, d = 0.05, v = 0.3, ft = 'bandpass', f = 1000, f2 = null, 
 }
 const bell = (f, t = 0, d = 1.2, v = 0.12) => { [1, 2.01, 3.02].forEach((m, i) => tone({f: f*m, t, d: d/(i+1), v: v/(i+1), a: 0.003})); };
 
+// Grincement de porte : frottement « accroche-glisse » du gond = train d'impulsions dont la cadence varie,
+// chaque impulsion fait résonner le bois. Puis rendu façon console 16 bits (échantillonnage réduit, quantification).
+function creak(){
+  const c = ac(), sr = c.sampleRate, D = 0.95, n = Math.ceil(sr * D), buf = c.createBuffer(1, n, sr), out = buf.getChannelData(0);
+  const res = [[620, 0.9, 0.0045], [1180, 0.5, 0.003], [2350, 0.22, 0.0018]];   // résonances du bois : fréquence, poids, amortissement
+  let phase = 0, seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const rate = x => 38 + 70 * Math.sin(Math.PI * Math.min(1, x / 0.75)) ** 0.8 + 12 * Math.sin(x * 9);   // cadence : monte puis retombe
+  const env = x => Math.min(1, x / 0.08) * Math.max(0, Math.min(1, (D - x) / 0.25));
+  const pulses = [];
+  for (let k = 0; k < n; k++){ const x = k / sr; phase += rate(x) / sr; if (phase >= 1){ phase -= 1; pulses.push([k, env(x) * (0.75 + 0.25 * rnd())]); } }
+  for (const [k0, a] of pulses) for (const [f, w, tau] of res){
+    const len = Math.min(n - k0, Math.ceil(sr * tau * 6));
+    for (let k = 0; k < len; k++){ const t = k / sr; out[k0 + k] += a * w * Math.exp(-t / tau) * Math.sin(2 * Math.PI * f * t); }
+  }
+  // 16 bits façon console : 16 kHz « tenu », 7 bits de profondeur, puis lissage
+  const hold = Math.max(1, Math.round(sr / 16000)), q = 64; let last = 0, lp = 0;
+  for (let k = 0; k < n; k++){ if (k % hold === 0) last = Math.round(Math.max(-1, Math.min(1, out[k] * 0.55)) * q) / q; lp += (last - lp) * 0.55; out[k] = lp; }
+  const src = c.createBufferSource(), g = c.createGain(); src.buffer = buf; g.gain.value = 0.6;
+  src.connect(g).connect(c.destination); src.start();
+}
+
 const SOUNDS = {
   pixel: {
     quete: {
@@ -65,27 +86,7 @@ const SOUNDS = {
       A: () => { [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone({f, type:'square', t:i*0.09, d:0.1, v:0.1})); tone({f:1319, type:'square', t:0.56, d:0.5, v:0.11}); },
       B: () => { tone({f:200, f2:1600, type:'square', d:0.35, v:0.08}); [2093, 2637, 3136].forEach((f, i) => tone({f, type:'triangle', t:0.38 + i*0.07, d:0.25, v:0.1})); },
     },
-    // Entrée dans la cabane : 3 propositions de porte
-    cabane: {
-      // A — grincement d'une vieille porte en bois, puis le battant qui touche le mur
-      A: () => {
-        [[170,230,0,.2],[230,195,.2,.16],[195,275,.36,.22],[275,240,.58,.14]].forEach(([f,f2,t,d]) => { tone({f, f2, type:'sawtooth', t, d, v:0.05, a:0.02}); tone({f:f*2.02, f2:f2*2.02, type:'square', t, d, v:0.012, a:0.02}); });
-        noise({t:0, d:0.72, v:0.05, ft:'bandpass', f:1100, f2:800, q:6});
-        noise({t:0.74, d:0.16, v:0.5, ft:'lowpass', f:260, q:1}); tone({f:90, f2:55, t:0.74, d:0.18, v:0.25});
-      },
-      // B — clic du loquet en métal, la porte qui glisse, petit choc sourd
-      B: () => {
-        noise({t:0, d:0.025, v:0.45, ft:'highpass', f:3500}); tone({f:1900, f2:1500, type:'square', t:0.005, d:0.03, v:0.05});
-        noise({t:0.09, d:0.03, v:0.4, ft:'highpass', f:2800}); tone({f:1400, f2:1100, type:'square', t:0.095, d:0.035, v:0.05});
-        noise({t:0.16, d:0.42, v:0.18, ft:'bandpass', f:700, f2:320, q:2});
-        noise({t:0.6, d:0.12, v:0.4, ft:'lowpass', f:300}); tone({f:110, f2:70, t:0.6, d:0.14, v:0.2});
-      },
-      // C — façon jeu 8 bits : deux coups toc-toc, porte qui s'ouvre (glissando) et petit air d'accueil
-      C: () => {
-        [0, 0.13].forEach(t => { noise({t, d:0.05, v:0.45, ft:'lowpass', f:600}); tone({f:180, f2:120, type:'square', t, d:0.05, v:0.08}); });
-        tone({f:220, f2:660, type:'square', t:0.34, d:0.18, v:0.06});
-        [392, 523, 659, 784].forEach((f, i) => tone({f, type:'square', t:0.56 + i*0.08, d:i === 3 ? 0.3 : 0.09, v:0.09}));
-      },
-    },
+    // Entrée dans la cabane : grincement d'une vieille porte en bois, rendu 16 bits
+    cabane: { A: () => creak() },
   },
 };
