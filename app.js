@@ -107,6 +107,7 @@ const blank = () => ({
   elo:[],           // {date,v}
   kcal:{},          // date → total
   grade:{},         // date → note de qualité C / B / A / S
+  poids:{},         // date → poids en kg (suivi, sans XP)
   mquests:[],       // quêtes principales / secondaires {id,type:'main'|'side',text,done}
   fold:{},          // sections repliées de l'onglet Quêtes
 });
@@ -774,6 +775,14 @@ function viewStrategie(snap){
    <div class="sec">Journal Stratégie</div><div class="win flat">${journal('str', snap)}</div>`;
 }
 
+const kgFmt = v => String(Math.round(v*10)/10).replace('.', ',');
+function poidsInfo(){   // dernier poids saisi et évolution sur 30 jours
+  const P = S.poids || {}, ds = Object.keys(P).filter(d => P[d] > 0).sort();
+  if (!ds.length) return null;
+  const last = ds[ds.length-1], since = addDays(today(), -29), in30 = ds.filter(d => d >= since);
+  const diff = in30.length > 1 ? P[in30[in30.length-1]] - P[in30[0]] : null;
+  return {kg: P[last], date: last, diff, from: in30[0]};
+}
 function viewVitalite(snap){
   const t = today(), kc = S.kcal[t] || '', tr = snap.tier, ka = kcalAvg();
   const days = Array.from({length:7}, (_,i) => addDays(t, -i));
@@ -784,11 +793,15 @@ function viewVitalite(snap){
      <div class="num" style="font-size:19px">${ka ? `${ka.avg} kcal/jour en moyenne (${ka.n} j saisis)` : 'Pas encore de calories saisies'}</div></div></div><!--/tete-->
    <div class="win"><div class="qt">Qualité du jour</div>${gradeRow(t)}
      <div class="qt" style="margin-top:8px">Total du jour</div>
-     <div class="row"><input class="mid" type="number" inputmode="numeric" min="0" step="50" placeholder="kcal" value="${kc}" data-in="kcal"><span class="muted">kcal · objectif ${RULES.kcalSeuil}</span></div>
-     ${bar((kc||0)/RULES.kcalSeuil, 'vit')}
+     <div class="row"><input class="mid" type="number" inputmode="numeric" min="0" step="50" placeholder="kcal" value="${kc}" data-in="kcal"><span class="muted">kcal</span></div>
      <div class="muted small">S 🥩 excellent · A 🍗 bon · B 🍝 moyen · C 🍔 mauvais. Ton rang change l'allure de ton personnage.</div></div>
+   ${(() => { const pi = poidsInfo(), pt = (S.poids || {})[t];
+     const ev = pi && pi.diff != null ? `${pi.diff > 0 ? '+' : pi.diff < 0 ? '−' : '±'}${kgFmt(Math.abs(pi.diff))} kg depuis le ${shortDate(pi.from)}` : '';
+     return `<div class="win"><div class="qt">Poids du jour</div>
+     <div class="row"><input class="mid" type="number" inputmode="decimal" step="0.1" min="0" placeholder="kg" value="${pt ?? ''}" data-in="poids"><span class="muted">kg</span></div>
+     <div class="muted small">${pi ? `Dernier : ${kgFmt(pi.kg)} kg (${pi.date === t ? "aujourd'hui" : shortDate(pi.date)})${ev ? ' · ' + ev : ''}` : 'Pas encore de poids saisi. Pour le suivi seulement, sans XP.'}</div></div>`; })()}
    <div class="sec">7 derniers jours</div>
-   <div class="win flat log">${days.map(d => { const v = S.kcal[d], g = (S.grade || {})[d]; return `<div><span class="d">${shortDate(d)}</span><span class="grow">${v ? v+' kcal' : '<span class="muted">—</span>'}</span><span class="xp">${g ? g+' '+emo(g) : ''}</span></div>`; }).join('')}</div>
+   <div class="win flat log">${days.map(d => { const v = S.kcal[d], g = (S.grade || {})[d]; return `<div><span class="d">${shortDate(d)}</span><span class="grow">${v ? v+' kcal' : '<span class="muted">—</span>'}</span><span class="muted">${(S.poids || {})[d] ? kgFmt(S.poids[d]) + ' kg' : ''}</span><span class="xp">${g ? g+' '+emo(g) : ''}</span></div>`; }).join('')}</div>
    <div class="muted small">Oublié de noter hier ? Ouvre « Sauvegarde et réglages » : la saisie d'hier y est possible.</div>`;
 }
 
@@ -813,7 +826,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.4.1</div>`;
+   <div class="muted small center">Life RPG · prototype v1.5</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -1011,6 +1024,7 @@ document.addEventListener('change', e => {
   else if (k === 'kg'){ const c = ensureCur(); c.ex[el.dataset.id].kg = isNaN(num) ? null : num; }
   else if (k === 'load'){ if (isNaN(num)) delete S.loads[el.dataset.id]; else S.loads[el.dataset.id] = num;
     if (S.cur && S.cur.ex[el.dataset.id] && !S.cur.ex[el.dataset.id].sets.some(x => x)) S.cur.ex[el.dataset.id].kg = isNaN(num) ? null : num; }
+  else if (k === 'poids'){ S.poids = S.poids || {}; if (num > 0 && num < 400) S.poids[today()] = Math.round(num*10)/10; else delete S.poids[today()]; }
   else if (k === 'name'){ S.name = el.value.trim() || 'Boss'; }
   else if (k === 'import'){
     const f = el.files[0]; if (!f) return;
