@@ -879,7 +879,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.7.9</div>`;
+   <div class="muted small center">Life RPG · prototype v1.7.10</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -936,7 +936,6 @@ function feedback(before){
   if (up) play('niveau'); else if (gained) play('quete');
 }
 document.addEventListener('click', e => {
-  if (route() === 'cabane' && e.target.closest('a[href^="#"]')) return;   // en sortant de la cabane : le son de porte (joué au changement de page)
   if (e.target.closest('nav.tabs a')) play('onglet');
   else if (e.target.closest('a.stat-link')) play('attribut');
   else if (e.target.closest('a.cab-hit')) play('cabane');
@@ -1099,8 +1098,7 @@ document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return; const el = e.target; if (!el.dataset?.in) return;
   const btn = el.parentElement.querySelector('[data-act]'); if (btn) { e.preventDefault(); el.dispatchEvent(new Event('change', {bubbles:true})); btn.click(); }
 });
-let lastRoute = route();
-window.addEventListener('hashchange', () => { const r = route(); if (lastRoute === 'cabane' && r !== 'cabane') play('cabane'); lastRoute = r; window.scrollTo(0,0); document.getElementById('app').scrollTop = 0; render(); });
+window.addEventListener('hashchange', () => { window.scrollTo(0,0); document.getElementById('app').scrollTop = 0; render(); });
 // Repasser sur l'appli le lendemain : rafraîchir la date
 document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
 
