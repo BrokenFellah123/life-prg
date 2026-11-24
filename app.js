@@ -150,7 +150,22 @@ function save(){ localStorage.setItem(KEY, JSON.stringify(S)); }
 // Le rang ne compte pas dans le niveau perso : il change l'allure de l'avatar.
 const GRADES = ['C','B','A','S'];
 const GVAL = {C:1, B:2, A:3, S:4};
-const GEMO = {C:'🍔', B:'🍝', A:'🍗', S:'🥩'};
+const GEMO = {C:'burger', B:'casse-croûte', A:'cuisse rôtie', S:'steak'};   // noms (texte des toasts)
+// Icônes de nourriture en pixel art (comme la gourde) : X contour, . transparent
+const FOOD = {
+  C: {g:['..XXXXXX..','.XbbsbbbX.','XbsbbbsbbX','XbbbbbbbbX','XllllllllX','XyyyyyyyyX','XmmmmmmmmX','XbbbbbbbbX','.XXXXXXXX.'],
+      c:{X:'#1a1222', b:'#d9a35a', s:'#f3e3b0', l:'#5fa04e', y:'#f2c94c', m:'#6e4220'}},
+  B: {g:['.XXXXXXXXXX.','XbhbbbhbbbhX','XbbbbbbbbbbX','XrwrrXyyyyyX','XrrrwXyyoyyX','XwrrrXyyyyyX','XbbbbbbbbbbX','.XXXXXXXXXX.'],
+      c:{X:'#1a1222', b:'#d9a35a', h:'#f3e3b0', r:'#a8324a', w:'#f0d8d8', y:'#f2c94c', o:'#d9a32e'}},
+  A: {g:['....XXXX..','...XmmhmX.','..XmmhhmmX','..XmmmmmmX','..XmdmmmX.','.XXXdddX..','XwwXXXX...','XwwX......','.XX.......'],
+      c:{X:'#1a1222', m:'#c98a4a', h:'#f0c27a', d:'#9a6234', w:'#f3ecd8'}},
+  S: {g:['..XXXXXX..','.XffffffX.','XfrrrrrrfX','XfrhwrrrfX','XfrrwwrrfX','XfrrrrhrfX','.XfrrrrfX.','..XXXXXX..'],
+      c:{X:'#1a1222', f:'#f3e3d0', r:'#b8323a', h:'#d9505a', w:'#f3ecd8'}},
+};
+const foodSVG = (g, k = 2.4) => { const F = FOOD[g]; if (!F) return ''; let r = '';
+  F.g.forEach((row, y) => [...row].forEach((ch, x) => { if (F.c[ch]) r += `<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="${F.c[ch]}"/>`; }));
+  const w = F.g[0].length, h = F.g.length;
+  return `<svg viewBox="0 0 ${w} ${h}" style="width:${Math.round(w*k)}px;height:${Math.round(h*k)}px;shape-rendering:crispEdges;vertical-align:middle" aria-label="${GEMO[g]}">${r}</svg>`; };
 const last30 = obj => { const t = today(), from = addDays(t, -29); return Object.keys(obj || {}).filter(d => d >= from && d <= t); };
 function tierOf(){
   const ds = last30(S.grade).filter(d => GVAL[S.grade[d]]);
@@ -163,8 +178,8 @@ function kcalAvg(){
   const ds = last30(S.kcal).filter(d => S.kcal[d] > 0);
   return ds.length ? {avg: Math.round(ds.reduce((a,d) => a + S.kcal[d], 0) / ds.length), n: ds.length} : null;
 }
-const tierTxt = t => t ? `${t.letter}-tier <span class="emo">${GEMO[t.letter]}</span>` : 'sans tier';
-const emo = g => `<span class="emo">${GEMO[g]}</span>`;
+const tierTxt = t => t ? `${t.letter}-tier <span class="emo">${foodSVG(t.letter, 3)}</span>` : 'sans tier';
+const emo = g => `<span class="emo">${foodSVG(g)}</span>`;
 function levelOf(xp){
   // Passer du niveau n-1 au niveau n coûte 100×n XP (niveau 1 = 100 XP, niveau 2 = +200…)
   let lvl = 0, rest = xp;
@@ -793,7 +808,7 @@ function viewVitalite(snap){
    <div class="win"><div class="qt">Qualité du jour</div>${gradeRow(t)}
      <div class="qt" style="margin-top:8px">Total du jour</div>
      <div class="row"><input class="mid" type="number" inputmode="numeric" min="0" step="50" placeholder="kcal" value="${kc}" data-in="kcal"><span class="muted">kcal</span></div>
-     <div class="muted small">S 🥩 excellent · A 🍗 bon · B 🍝 moyen · C 🍔 mauvais. Ton rang change l'allure de ton personnage.</div></div>
+     <div class="muted small">S ${emo('S')} excellent · A ${emo('A')} bon · B ${emo('B')} moyen · C ${emo('C')} mauvais. Ton rang change l'allure de ton personnage.</div></div>
    ${(() => { const pi = poidsInfo(), pt = (S.poids || {})[t];
      const ev = pi && pi.diff != null ? `${pi.diff > 0 ? '+' : pi.diff < 0 ? '−' : '±'}${kgFmt(Math.abs(pi.diff))} kg depuis le ${shortDate(pi.from)}` : '';
      return `<div class="win"><div class="qt">Poids du jour</div>
@@ -825,7 +840,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.5.2</div>`;
+   <div class="muted small center">Life RPG · prototype v1.6</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -910,7 +925,7 @@ const ACTS = {
   mqDel(el){ const q = (S.mquests || []).find(x => x.id === el.dataset.id); if (q && sure(el, `Supprimer la quête « ${q.text} » ?${q.done ? ' Son XP part avec.' : ''}`)) S.mquests = S.mquests.filter(x => x !== q); },
   tqRemove(el){ const q = (S.tquests || []).find(x => x.id === el.dataset.id); if (q && sure(el, `Supprimer la quête de demain « ${q.text} » ?`)) S.tquests = S.tquests.filter(x => x !== q); },
   grade(el){ S.grade = S.grade || {}; const d = el.dataset.d, g = el.dataset.g;
-    if (S.grade[d] === g) delete S.grade[d]; else { S.grade[d] = g; { const tr = tierOf(); toast(`${g} ${GEMO[g]} noté · rang ${tr.letter}-tier ${GEMO[tr.letter]}`); }; } },
+    if (S.grade[d] === g) delete S.grade[d]; else { S.grade[d] = g; { const tr = tierOf(); toast(`${g} noté · rang ${tr.letter}-tier`); }; } },
   sound(){ S.sound = S.sound === false; if (S.sound) setTimeout(() => play('quete'), 50); },
   outfit(el){ S.outfit = Object.assign({}, S.outfit, {[el.dataset.part]: el.dataset.v}); },
   pages(el){

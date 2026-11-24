@@ -140,7 +140,7 @@ select.sel{flex:1;background:var(--track);border:2px solid var(--line);border-ra
 .spk{opacity:0;animation:spk 4s steps(1) infinite}
 @keyframes spk{0%{opacity:0}8%{opacity:1}16%{opacity:.4}24%,100%{opacity:0}}
 .btn.grade{min-width:56px}
-.emo{font-family:system-ui,sans-serif;font-size:1.5em;line-height:1;vertical-align:middle}
+.emo{display:inline-flex;align-items:center;line-height:1;vertical-align:middle;margin-left:.15em}
 @media (prefers-reduced-motion:reduce){#hero.hop,#hero.hop-big,#hero.hop-soft{animation:none}.spk{animation:none;opacity:1}}
 details.fold>summary.ttl{font-size:10px;color:var(--accent);padding:2px 0}
 details.fold:not([open]){padding-top:10px;padding-bottom:10px}
