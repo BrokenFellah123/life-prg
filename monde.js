@@ -39,7 +39,7 @@ function dayWorld(dateStr){
   return {
     r, biome,
     river: r() < .38, castle: r() < .3, fire: r() < .5, snow: biome === 'neige' || r() < .25,
-    trees: Math.floor(r() * 7), rocks: Math.floor(r() * 4), riverX: .15 + r() * .7, fireX: .5 + r() * .25,
+    trees: Math.floor(r() * 7), rocks: Math.floor(r() * 4), riverX: .15 + r() * .7, fireX: .5 + r() * .08,
   };
 }
 
@@ -73,18 +73,18 @@ function drawFire(ctx, x, y, t){
   px(ctx, x, y - 4, 1, 2, '#f6a43a'); px(ctx, x, y - 3, 1, 1, '#ffe9a8');
 }
 
-function landscape(canvas, dateStr, mood){
+function landscape(canvas, dateStr, mood, lift = 0){
   const night = mood === 'nuit';
-  const W = canvas.width, H = canvas.height, ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, W, H);
+  const W = canvas.width, H = canvas.height - lift, ctx = canvas.getContext('2d');   // lift : bas de l'image, sous les onglets
+  ctx.clearRect(0, 0, W, canvas.height);
   const w = dayWorld(dateStr), r = w.r, B = BIOMES[w.biome];
   const N = tintOf(mood);
   skyBand(ctx, W, H, mood);
-  sunMoon(ctx, mood, Math.round(W * .84), 10, H, W);
+  sunMoon(ctx, mood, Math.round(W * .84), 8, H, W);
   // montagnes au loin
   const far = N(B.far), snow = N('#f4f7ff');
   let peaks = []; const np = 3 + Math.floor(r() * 3);
-  for (let i = 0; i < np; i++) peaks.push({x: (i + .2 + r() * .6) / np * W, h: 10 + r() * 14});
+  for (let i = 0; i < np; i++) peaks.push({x: (i + .2 + r() * .6) / np * W, h: 6 + r() * 12});
   for (let x = 0; x < W; x++){
     let top = H;
     for (const p of peaks){ const y = H - 20 - p.h + Math.abs(x - p.x) * .9; if (y < top) top = y; }
@@ -123,6 +123,10 @@ function landscape(canvas, dateStr, mood){
   for (let i = 0; i < w.rocks; i++) drawRock(ctx, Math.round(r() * (W - 6)), H - 2 - Math.floor(r() * 3), 1, night);
   const nearT = Math.floor(r() * 3);
   for (let i = 0; i < nearT; i++){ const x = r() < .5 ? 4 + Math.round(r() * W * .2) : Math.round(W * .82 + r() * W * .15); drawTree(ctx, x, H - 2, 2, B, w.biome === 'neige' || r() < .4 ? 'pin' : 'rond', night); }
+  if (lift){   // l'herbe continue sous les onglets
+    px(ctx, 0, H, W, lift, g1);
+    for (let i = 0; i < W * lift / 14; i++) px(ctx, Math.round(r() * W), H + Math.floor(r() * lift), 1, 1, r() < .7 ? g2 : N(B.flowers[0] || B.grass2));
+  }
   return w;
 }
 
@@ -173,18 +177,18 @@ function skyBand(ctx, W, H, mood){
 function disc(ctx, cx, cy, rad, c){ for (let dy = -rad; dy <= rad; dy++){ const w = Math.round(Math.sqrt(rad*rad - dy*dy)); px(ctx, cx - w, cy + dy, 2*w + 1, 1, c); } }
 // Soleil (ou lune) en second plan : dessiné avant le paysage, donc derrière les montagnes
 function sunMoon(ctx, mood, x, y, H, W){
-  if (mood === 'nuit'){ disc(ctx, x, y + 2, 6, '#f4f1d8'); disc(ctx, x + 3, y, 5, SKY.nuit[0]); return; }
+  if (mood === 'nuit'){ disc(ctx, x, y + 1, 5, '#f4f1d8'); disc(ctx, x + 3, y - 1, 4, SKY.nuit[0]); return; }
   // Le soleil suit l'heure : il sort de derrière les collines à 6h45, monte jusqu'à midi et demi, redescend et disparaît à 18h15
   const d = new Date(), m = d.getHours() * 60 + d.getMinutes();
-  const top = 11, hz = H - 12, rise = H - 42;   // rise : hauteur à la fin de l'aube, au-dessus des montagnes
+  const top = 7, hz = H - 9, rise = H - 27;   // rise : hauteur à la fin de l'aube, au-dessus des montagnes
   let xx, yy;
   if (m < 435){ const k = Math.max(0, (m - 405) / 30); xx = .1 + .08 * k; yy = hz - (hz - rise) * k; }              // aube : il sort de derrière l'horizon
   else if (m < 1065){ const k = (m - 435) / 630; xx = .18 + .64 * k; yy = rise - (rise - top) * Math.sin(Math.PI * k); }   // jour : arc dans le ciel
   else { const k = Math.min(1, (m - 1065) / 30); xx = .82 + .08 * k; yy = rise + (hz - rise) * k; }                // crépuscule : il se couche
   xx = W ? Math.round(W * xx) : x; yy = Math.round(yy);
   const low = mood !== 'jour';
-  disc(ctx, xx, yy, 10, low ? '#ffb070' : '#fff2b0');
-  disc(ctx, xx, yy, 8, low ? '#ff8a3a' : '#ffe27a');
+  disc(ctx, xx, yy, 8, low ? '#ffb070' : '#fff2b0');
+  disc(ctx, xx, yy, 6, low ? '#ff8a3a' : '#ffe27a');
 }
 
 function homeScene(canvas, lvl, mood){
@@ -195,10 +199,10 @@ function homeScene(canvas, lvl, mood){
   skyBand(ctx, W, H, mood);
   sunMoon(ctx, mood, 22, 12, H, W);
   const a = 1.3;
-  for (let x = 0; x < W; x++){ const y = Math.round(H - 14 - 3 * Math.sin(x / 19 + a)); px(ctx, x, y, 1, H - y, N(B.mid)); px(ctx, x, y + 3, 1, H - y, N(B.mid2)); }
-  const gy = H - 8; px(ctx, 0, gy, W, H - gy, N(B.grass)); px(ctx, 0, gy, W, 1, N(B.grass2));
-  for (let i = 0; i < W / 4; i++) px(ctx, Math.round(r() * W), gy + 1 + Math.floor(r() * 7), 1, 1, N(B.flowers[Math.floor(r() * 3)]));
-  drawTree(ctx, 8, gy + 1, 2, B, 'rond', night); drawTree(ctx, W - 12, gy + 1, 2, B, 'pin', night);
+  for (let x = 0; x < W; x++){ const y = Math.round(H - 40 - 3 * Math.sin(x / 19 + a)); px(ctx, x, y, 1, H - y, N(B.mid)); px(ctx, x, y + 3, 1, H - y, N(B.mid2)); }
+  const gy = H - 34; px(ctx, 0, gy, W, H - gy, N(B.grass)); px(ctx, 0, gy, W, 1, N(B.grass2));
+  for (let i = 0; i < W / 3; i++) px(ctx, Math.round(r() * W), gy + 1 + Math.floor(r() * 33), 1, 1, N(B.flowers[Math.floor(r() * 3)]));
+  drawTree(ctx, 16, gy + 1, 2, B, 'rond', night); drawTree(ctx, W - 20, gy + 1, 2, B, 'pin', night);
   const st = homeStage(lvl);
   drawHome(ctx, Math.round(W / 2), gy + 1, st, night, N);
   return st;

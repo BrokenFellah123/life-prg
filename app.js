@@ -426,23 +426,24 @@ function drawWorld(r, snap){
   const show = r === 'jour' || r === 'fiche';
   document.body.classList.toggle('has-scene', show);
   if (!show){ box.innerHTML = ''; return; }
-  const W = Math.min(190, Math.round(Math.min(innerWidth, 560) / 3)), H = r === 'jour' ? 64 : 60;
+  const W = r === 'jour' ? Math.min(190, Math.round(Math.min(innerWidth, 560) / 3)) : Math.min(280, Math.round(Math.min(innerWidth, 560) / 2)), H = r === 'jour' ? 80 : 92, LIFT = r === 'jour' ? 16 : 0;
   box.className = r === 'jour' ? 'land' : 'home';
   box.innerHTML = `<canvas width="${W}" height="${H}"></canvas><div class="sc-over"></div>`;
   const cv = box.querySelector('canvas'), over = box.querySelector('.sc-over');
   document.body.style.setProperty('--sh', Math.round(box.clientWidth * H / W) + 'px');
+  box.style.setProperty('--sk0', SKY[mood][0]);
   if (r === 'jour'){
-    const w = landscape(cv, today(), mood), n = dailyDone();
+    const w = landscape(cv, today(), mood, LIFT), n = dailyDone(), GH = H - LIFT;
     const fx = Math.round(w.fireX * W);
-    if (w.fire) drawFire(cv.getContext('2d'), fx, H - 3, 0);
+    if (w.fire) drawFire(cv.getContext('2d'), fx, GH - 4, 0);
     const scale = box.clientWidth / W;
-    const avX = w.fire ? (fx - 16) * scale : box.clientWidth * .42;
-    over.innerHTML = `<div class="sc-av" style="left:${Math.round(avX)}px">${avatarSVG(stageOf(snap.lv.for.lvl), 44)}</div>
+    const avX = w.fire ? (fx - 14) * scale : box.clientWidth * .44;
+    over.innerHTML = `<div class="sc-av" style="left:${Math.round(avX)}px;bottom:${Math.round((LIFT + 2) * scale)}px">${avatarSVG(stageOf(snap.lv.for.lvl), 44)}</div>
       ${w.fire && mood !== 'jour' ? `<div class="sc-glow" style="left:${Math.round(fx * scale)}px"></div>` : ''}
-      <div class="sc-bub" style="left:${Math.max(8, Math.min(box.clientWidth - 198, Math.round(avX) - 70))}px">${esc(bubbleLine(w, n, 5, mood === 'nuit', S.name))}</div>
+      <div class="sc-bub" style="bottom:${Math.round((LIFT + 2) * scale + box.clientWidth * .13)}px;left:${Math.max(8, Math.min(box.clientWidth - 198, Math.round(avX) - 70))}px">${esc(bubbleLine(w, n, 5, mood === 'nuit', S.name))}</div>
       <div class="sc-place">${BIOMES[w.biome].name}${w.castle ? ' · château en vue' : ''}${w.river ? ' · rivière' : ''}</div>`;
     clearInterval(drawWorld.fire);
-    if (w.fire) { let t = 0; drawWorld.fire = setInterval(() => { if (!document.hidden && document.contains(cv)) drawFire(cv.getContext('2d'), fx, H - 3, ++t); }, 450); }
+    if (w.fire) { let t = 0; drawWorld.fire = setInterval(() => { if (!document.hidden && document.contains(cv)) drawFire(cv.getContext('2d'), fx, GH - 4, ++t); }, 450); }
   } else {
     clearInterval(drawWorld.fire);
     const st = homeScene(cv, snap.perso, mood);
@@ -735,7 +736,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.2.2</div>`;
+   <div class="muted small center">Life RPG · prototype v1.2.3</div>`;
 }
 
 /* ================= Rendu et routage ================= */
