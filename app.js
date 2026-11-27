@@ -886,12 +886,19 @@ function viewSavoir(snap, arg){
    <div class="sec">Journal Savoir</div><div class="win flat">${journal('sav', snap)}</div>`;
 }
 
+let editingBook = null;   // livre en cours de modification (Sagesse)
 function viewSagesse(snap){
   const t = today();
   const cur = S.books.filter(b => !b.done), fin = S.books.filter(b => b.done);
   const readOf = id => S.pages.filter(p => p.book === id).reduce((a,p) => a + p.n, 0);
   const todayLogs = S.pages.filter(p => p.date === t);
-  const books = cur.map(b => { const r = readOf(b.id); return `<div class="ex"><div class="row"><span class="grow name">${esc(b.title)}</span><span class="num muted">${r}${b.total ? '/'+b.total : ''} p.</span></div>
+  // Modification du titre et du nombre de pages, sur place
+  const editRow = b => `<div class="col" style="gap:6px"><input value="${esc(b.title)}" data-in="ebt-${b.id}" maxlength="120" placeholder="Titre">
+     <input type="number" inputmode="numeric" min="0" value="${b.total || ''}" placeholder="Nombre de pages (facultatif)" data-in="ebp-${b.id}">
+     <div class="row"><button class="btn sm pri grow" data-act="saveBook" data-id="${b.id}">Enregistrer</button><button class="btn sm ghost" data-act="editBook" data-id="">Annuler</button></div></div>`;
+  const tools = b => `<button class="xdel" data-act="delBook" data-id="${b.id}" aria-label="Supprimer le livre">✕</button>`;
+  const books = cur.map(b => { const r = readOf(b.id); if (editingBook === b.id) return `<div class="ex">${editRow(b)}</div>`;
+    return `<div class="ex has-x">${tools(b)}<div class="row" style="padding-right:30px"><span class="grow name">${esc(b.title)}</span><button class="btn sm ghost" data-act="editBook" data-id="${b.id}" >Modifier</button><span class="num muted">${r}${b.total ? '/'+b.total : ''} p.</span></div>
      ${b.total ? bar(r/b.total, 'sag') : ''}
      <div class="row wrap"><button class="btn sm" data-act="pages" data-n="10" data-id="${b.id}">+10</button>
      <input class="mid" type="number" inputmode="numeric" min="1" placeholder="pages" data-in="pg-${b.id}"><button class="btn sm" data-act="pagesq" data-id="${b.id}">OK</button>
@@ -903,7 +910,7 @@ function viewSagesse(snap){
    <div class="win flat col"><div class="ttl" style="font-size:9px">AJOUTER UN LIVRE</div>
      <input placeholder="Titre" data-in="btitle"><input type="number" inputmode="numeric" placeholder="Nombre de pages (facultatif)" data-in="btotal">
      <button class="btn" data-act="addBook">Ajouter</button></div>
-   ${fin.length ? `<div class="sec">Livres finis · ${fin.length}</div><div class="win flat">${fin.map(b => `<div class="row small"><span class="grow">${esc(b.title)}</span><span class="num muted">${shortDate(b.done)}</span><button class="btn sm ghost" data-act="unfinishBook" data-id="${b.id}">↺</button></div>`).join('')}</div>` : ''}
+   ${fin.length ? `<div class="sec">Livres finis · ${fin.length}</div><div class="win flat">${fin.map(b => editingBook === b.id ? `<div class="ex">${editRow(b)}</div>` : `<div class="row small has-x" style="padding:6px 34px 6px 0">${tools(b)}<span class="grow">${esc(b.title)}</span><span class="num muted">${shortDate(b.done)}</span><button class="btn sm ghost" data-act="editBook" data-id="${b.id}" >Modifier</button><button class="btn sm ghost" data-act="unfinishBook" data-id="${b.id}">↺</button></div>`).join('')}</div>` : ''}
    <div class="sec">Journal Sagesse</div><div class="win flat">${journal('sag', snap)}</div>`;
 }
 
@@ -971,7 +978,7 @@ function viewReglages(){
      Quête du lendemain réussie : +${RULES.queteDemain} XP. Quêtes principales et secondaires : l'XP et l'attribut que tu choisis (1 à 100 XP). Récompenses : un objet de garde-robe par niveau perso, du 1 au 10.<br>
      Aucune pénalité. Après ${RULES.absenceRetour} jours sans rien, l'XP du jour de reprise compte double.</div></div>
    <button class="btn danger" data-act="reset">Tout effacer</button>
-   <div class="muted small center">Life RPG · prototype v1.9.2</div>`;
+   <div class="muted small center">Life RPG · prototype v1.9.3</div>`;
 }
 
 /* ================= Rendu et routage ================= */
@@ -1075,6 +1082,15 @@ const ACTS = {
   },
   delPages(el){ const p = S.pages.find(p => p.id === el.dataset.id); if (p && sure(el, `Supprimer ces ${p.n} pages et leur XP ?`)) S.pages = S.pages.filter(x => x !== p); },
   addBook(){ const title = val('btitle'); if (!title) return toast('Titre ?'); S.books.push({id:uid(), title, total: parseInt(val('btotal')) || 0, done:null}); },
+  editBook(el){ editingBook = el.dataset.id || null; },
+  saveBook(el){ const b = S.books.find(b => b.id === el.dataset.id); if (!b) return;
+    const title = val('ebt-' + b.id); if (!title) return toast('Titre ?');
+    b.title = title; b.total = parseInt(val('ebp-' + b.id)) || 0; editingBook = null; toast('Livre modifié'); },
+  delBook(el){ const b = S.books.find(b => b.id === el.dataset.id); if (!b) return;
+    const n = S.pages.filter(p => p.book === b.id).reduce((a,p) => a + p.n, 0);
+    const xp = n * RULES.page + (b.done ? RULES.livre : 0);
+    if (!sure(el, `Supprimer « ${b.title} » ?${xp ? ` Ses ${n} pages lues${b.done ? ' et le bonus de livre fini' : ''} seront retirées : −${xp} XP Sagesse.` : ''} Pour juste changer le nom, utilise « Modifier ».`)) return;
+    S.books = S.books.filter(x => x !== b); S.pages = S.pages.filter(p => p.book !== b.id); if (editingBook === b.id) editingBook = null; },
   finishBook(el){ const b = S.books.find(b => b.id === el.dataset.id); b.done = today(); toast(`Livre fini ! +${RULES.livre} XP`); },
   unfinishBook(el){ S.books.find(b => b.id === el.dataset.id).done = null; },
   puz(){ S.puzzles.push({id:uid(), date:today()}); toast(`+${RULES.puzzles} XP Stratégie`); },
